@@ -1,0 +1,123 @@
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   FLOW design tokens — dark cinématique + touche streetwear.
+   Gradient signature : violet électrique → bleu électrique.
+   --------------------------------------------------------------------------- */
+
+@theme {
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', monospace;
+
+  --color-page: var(--flow-page);
+  --color-surface: var(--flow-surface);
+  --color-surface-2: var(--flow-surface-2);
+  --color-ink: var(--flow-ink);
+  --color-ink-2: var(--flow-ink-2);
+  --color-ink-3: var(--flow-ink-3);
+  --color-line: var(--flow-line);
+  --color-accent: var(--flow-accent);
+  --color-accent-2: var(--flow-accent-2);
+  --color-pos: var(--flow-pos);
+  --color-neg: var(--flow-neg);
+  --color-warn: var(--flow-warn);
+
+  --radius-card: 1.5rem;
+
+  --animate-fade-up: fade-up 0.45s cubic-bezier(0.21, 1.02, 0.73, 1) both;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+:root {
+  /* Dark (défaut) — fond quasi-noir profond */
+  --flow-page: #0b0b0f;
+  --flow-surface: #15151b;
+  --flow-surface-2: #1d1d25;
+  --flow-ink: #f5f5f7;
+  --flow-ink-2: #b9b9c3;
+  --flow-ink-3: #82828e;
+  --flow-line: rgba(255, 255, 255, 0.08);
+  --flow-accent: #8b5cf6;
+  --flow-accent-2: #38bdf8;
+  /* Séries data (validées CVD sur surface sombre) */
+  --flow-pos: #1baf7a;
+  --flow-neg: #e66767;
+  --flow-warn: #c98500;
+  --flow-grid: #2c2c33;
+  --flow-glass: rgba(255, 255, 255, 0.04);
+
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --flow-page: #f4f4f1;
+  --flow-surface: #ffffff;
+  --flow-surface-2: #ececea;
+  --flow-ink: #121216;
+  --flow-ink-2: #4c4c56;
+  --flow-ink-3: #85858f;
+  --flow-line: rgba(10, 10, 20, 0.09);
+  --flow-accent: #7c3aed;
+  --flow-accent-2: #0284c7;
+  --flow-pos: #0d8a5f;
+  --flow-neg: #d43f3f;
+  --flow-warn: #a36c00;
+  --flow-grid: #e1e0d9;
+  --flow-glass: rgba(10, 10, 20, 0.03);
+
+  color-scheme: light;
+}
+
+html,
+body {
+  background: var(--flow-page);
+  color: var(--flow-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100%;
+}
+
+/* Tous les montants en mono, rendu compteur */
+.amount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.text-gradient {
+  background: linear-gradient(100deg, var(--flow-accent), var(--flow-accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.bg-gradient-flow {
+  background: linear-gradient(100deg, var(--flow-accent), var(--flow-accent-2));
+}
+
+.glass {
+  background: color-mix(in srgb, var(--flow-surface) 88%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--flow-line);
+}
+
+/* Scrollbars discrets */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--flow-surface-2) transparent;
+}
+
+input[type='date'] {
+  color-scheme: inherit;
+}
