@@ -190,3 +190,53 @@ export function formatRangeLabel(range: DateRange): string {
   const to = range.to.toLocaleDateString('fr-FR', opts);
   return from === to ? from : `${from} → ${to}`;
 }
+
+/** Date de référence décalée de `offset` périodes (négatif = passé). */
+export function shiftReference(period: PeriodKind, offset: number, now = new Date()): Date {
+  const d = startOfDay(now);
+  if (offset === 0) return d;
+  switch (period) {
+    case 'day':
+      d.setDate(d.getDate() + offset);
+      return d;
+    case 'week':
+      d.setDate(d.getDate() + offset * 7);
+      return d;
+    case 'month':
+      return new Date(d.getFullYear(), d.getMonth() + offset, 1);
+    case 'quarter':
+      return new Date(d.getFullYear(), d.getMonth() + offset * 3, 1);
+    case 'year':
+      return new Date(d.getFullYear() + offset, 0, 1);
+    case 'custom':
+      return d;
+  }
+}
+
+/** Libellé court et lisible de la période courante (ex. « Mars 2026 », « T1 2026 »). */
+export function formatPeriodTitle(period: PeriodKind, range: DateRange): string {
+  switch (period) {
+    case 'day':
+      return range.from.toLocaleDateString('fr-FR', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'long',
+      });
+    case 'week': {
+      const to = new Date(range.to);
+      return `${range.from.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} – ${to.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`;
+    }
+    case 'month':
+      return cap(range.from.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }));
+    case 'quarter':
+      return `T${Math.floor(range.from.getMonth() / 3) + 1} ${range.from.getFullYear()}`;
+    case 'year':
+      return `${range.from.getFullYear()}`;
+    case 'custom':
+      return formatRangeLabel(range);
+  }
+}
+
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

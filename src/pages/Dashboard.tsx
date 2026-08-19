@@ -9,9 +9,10 @@ import { AnimatedAmount } from '../components/ui/AnimatedAmount';
 import { Card } from '../components/ui/Card';
 import { DeltaPill } from '../components/ui/DeltaPill';
 import { EmptyState } from '../components/ui/EmptyState';
+import { Segmented } from '../components/ui/Segmented';
 import { usePeriod } from '../context/PeriodContext';
 import { useScope } from '../context/ScopeContext';
-import { useCategories, useTransactions } from '../data/hooks';
+import { useCategories, useTransactions } from '../context/DataContext';
 import { activeSubscriptions, computePeriodStats } from '../logic/analytics';
 import { formatRangeLabel, fromISODate } from '../logic/dates';
 import { formatCents, formatPct } from '../logic/money';
@@ -19,9 +20,9 @@ import { formatCents, formatPct } from '../logic/money';
 const CURRENCY = () => localStorage.getItem('flow.currency') ?? 'EUR';
 
 export function Dashboard() {
-  const txs = useTransactions() ?? [];
-  const categories = useCategories() ?? [];
-  const { scope } = useScope();
+  const txs = useTransactions();
+  const categories = useCategories();
+  const { scope, setScope } = useScope();
   const { period, range } = usePeriod();
   const currency = CURRENCY();
 
@@ -41,8 +42,20 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="sticky top-[57px] z-20 -mx-4 bg-page/85 px-4 py-2 backdrop-blur-xl sm:-mx-6 sm:px-6">
-        <PeriodSelector />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Segmented
+          options={[
+            { value: 'both', label: 'Tout' },
+            { value: 'perso', label: 'Perso' },
+            { value: 'pro', label: 'Pro' },
+          ]}
+          value={scope}
+          onChange={setScope}
+          size="sm"
+        />
+        <div className="flex-1">
+          <PeriodSelector />
+        </div>
       </div>
 
       {/* Cartes clés */}

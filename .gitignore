@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Secrets — ne doivent jamais être commités
+.env
+.env.*
+!.env.example
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+.firebase/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

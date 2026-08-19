@@ -1,6 +1,9 @@
 import {
+  Cloud,
+  CloudOff,
   Download,
   KeyRound,
+  LogOut,
   Moon,
   Palette,
   Pencil,
@@ -10,6 +13,7 @@ import {
   Trash2,
   TriangleAlert,
   Upload,
+  UserRound,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Card } from '../components/ui/Card';
@@ -18,13 +22,72 @@ import { Modal } from '../components/ui/Modal';
 import { Segmented } from '../components/ui/Segmented';
 import { IconPicker } from '../components/transactions/IconPicker';
 import { getIcon } from '../components/ui/icons';
+import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { useBadges, useCategories } from '../data/hooks';
-import { repo, type ExportPayload } from '../data/repository';
+import { useBadges, useCategories, useRepo } from '../context/DataContext';
+import { type ExportPayload } from '../data/repository';
 import { CATEGORY_COLORS } from '../data/seed';
 import type { Badge, Category, Scope, TxType } from '../types';
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'MAD'];
+
+/** Compte connecté + état de la synchronisation. */
+function AccountCard() {
+  const { user, mode, configured, signOut, signInGoogle } = useAuth();
+
+  return (
+    <Card>
+      <SectionTitle icon={UserRound}>Compte & synchronisation</SectionTitle>
+      {mode === 'cloud' && user ? (
+        <div className="flex items-center gap-3">
+          {user.photoURL ? (
+            <img src={user.photoURL} alt="" className="h-11 w-11 shrink-0 rounded-full" />
+          ) : (
+            <div className="bg-gradient-flow flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-bold text-white">
+              {(user.displayName ?? user.email ?? '?').charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{user.displayName ?? 'Mon compte'}</p>
+            <p className="truncate text-xs text-ink-3">{user.email}</p>
+            <p className="mt-1 flex items-center gap-1.5 text-[11px] text-pos">
+              <Cloud size={11} />
+              Données synchronisées sur ton compte
+            </p>
+          </div>
+          <button
+            onClick={signOut}
+            className="glass flex min-h-[38px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-4 text-xs font-medium text-ink-2 hover:text-neg"
+          >
+            <LogOut size={14} />
+            Déconnexion
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="flex items-start gap-2 text-sm text-ink-2">
+            <CloudOff size={16} className="mt-0.5 shrink-0 text-ink-3" />
+            Mode local : tes données vivent dans ce navigateur uniquement et ne sont pas
+            synchronisées entre appareils.
+          </p>
+          {configured ? (
+            <button
+              onClick={signInGoogle}
+              className="bg-gradient-flow flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-2xl px-5 text-sm font-semibold text-white"
+            >
+              Se connecter avec Google
+            </button>
+          ) : (
+            <p className="rounded-2xl bg-surface-2 px-4 py-3 text-xs text-ink-3">
+              Firebase n'est pas configuré. Renseigne les variables <code>VITE_FIREBASE_*</code>{' '}
+              dans un fichier <code>.env</code> pour activer la synchronisation (voir le README).
+            </p>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 function SectionTitle({ icon: Icon, children }: { icon: typeof Palette; children: string }) {
   return (
@@ -41,6 +104,7 @@ const inputClass =
 // ---------------------------------------------------------------- Catégories
 
 function CategoryForm({ editing, onDone }: { editing: Category | null; onDone: () => void }) {
+  const repo = useRepo();
   const [label, setLabel] = useState(editing?.label ?? '');
   const [scope, setScope] = useState<Scope | 'both'>(editing?.scope ?? 'both');
   const [type, setType] = useState<TxType | 'both'>(editing?.type ?? 'expense');
@@ -129,6 +193,7 @@ function CategoryForm({ editing, onDone }: { editing: Category | null; onDone: (
 // ---------------------------------------------------------------- Badges
 
 function BadgeForm({ editing, onDone }: { editing: Badge | null; onDone: () => void }) {
+  const repo = useRepo();
   const [label, setLabel] = useState(editing?.label ?? '');
   const [color, setColor] = useState(editing?.color ?? CATEGORY_COLORS[4]);
 
@@ -174,8 +239,9 @@ function BadgeForm({ editing, onDone }: { editing: Badge | null; onDone: () => v
 
 export function Settings() {
   const { theme, setTheme } = useTheme();
-  const categories = useCategories() ?? [];
-  const badges = useBadges() ?? [];
+  const categories = useCategories();
+  const badges = useBadges();
+  const repo = useRepo();
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [currency, setCurrency] = useState(localStorage.getItem('flow.currency') ?? 'EUR');
@@ -228,6 +294,8 @@ export function Settings() {
 
   return (
     <div className="flex flex-col gap-4">
+      <AccountCard />
+
       {/* Apparence & devise */}
       <Card>
         <SectionTitle icon={Palette}>Apparence & devise</SectionTitle>

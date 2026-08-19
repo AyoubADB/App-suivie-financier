@@ -1,8 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ImagePlus, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useBadges, useCategories } from '../../data/hooks';
-import { repo, type NewTransaction } from '../../data/repository';
+import { useBadges, useCategories, useRepo } from '../../context/DataContext';
+import { type NewTransaction } from '../../data/repository';
 import { suggestCategory } from '../../logic/categorizer';
 import { FREQUENCY_LABELS, toISODate } from '../../logic/dates';
 import { parseAmountToCents } from '../../logic/money';
@@ -13,7 +13,8 @@ import { IconPicker } from './IconPicker';
 import { TxVisual } from './TxVisual';
 
 interface TransactionFormProps {
-  scope: Scope;
+  /** Scope pré-sélectionné ; reste modifiable dans le formulaire. */
+  defaultScope: Scope;
   /** Transaction existante → mode édition. */
   editing?: Transaction | null;
   onSaved: () => void;
@@ -48,11 +49,13 @@ async function fileToDataUrl(file: File): Promise<string> {
   return canvas.toDataURL('image/webp', 0.85);
 }
 
-export function TransactionForm({ scope, editing, onSaved }: TransactionFormProps) {
-  const categories = useCategories() ?? [];
-  const badges = useBadges() ?? [];
+export function TransactionForm({ defaultScope, editing, onSaved }: TransactionFormProps) {
+  const categories = useCategories();
+  const badges = useBadges();
+  const repo = useRepo();
   const fileInput = useRef<HTMLInputElement>(null);
 
+  const [scope, setScope] = useState<Scope>(editing?.scope ?? defaultScope);
   const [type, setType] = useState<TxType>(editing?.type ?? 'expense');
   const [label, setLabel] = useState(editing?.label ?? '');
   const [amountText, setAmountText] = useState(
@@ -136,16 +139,26 @@ export function TransactionForm({ scope, editing, onSaved }: TransactionFormProp
       }}
       className="flex flex-col gap-4"
     >
-      <Segmented
-        options={[
-          { value: 'expense', label: 'Dépense' },
-          { value: 'revenue', label: 'Revenu' },
-        ]}
-        value={type}
-        onChange={(t) => setType(t)}
-        className="self-start"
-        size="sm"
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Segmented
+          options={[
+            { value: 'expense', label: 'Dépense' },
+            { value: 'revenue', label: 'Revenu' },
+          ]}
+          value={type}
+          onChange={(t) => setType(t)}
+          size="sm"
+        />
+        <Segmented
+          options={[
+            { value: 'perso', label: 'Perso' },
+            { value: 'pro', label: 'Pro' },
+          ]}
+          value={scope}
+          onChange={(s) => setScope(s)}
+          size="sm"
+        />
+      </div>
 
       {/* Libellé → catégorisation auto */}
       <div className="flex items-center gap-3">
