@@ -13,6 +13,7 @@ import { Modal } from '../components/ui/Modal';
 import { Segmented } from '../components/ui/Segmented';
 import { usePeriod } from '../context/PeriodContext';
 import { useScope } from '../context/ScopeContext';
+import { useSettings } from '../context/SettingsContext';
 import { useBadges, useCategories, useRepo, useTransactions } from '../context/DataContext';
 import { dormantSubscriptions, inRange, monthlyEquivalent, yearlyEquivalent } from '../logic/analytics';
 import { normalize } from '../logic/categorizer';
@@ -54,7 +55,7 @@ export function Movements() {
   const [sort, setSort] = useState<SortKey>('amount');
 
   const tab: Tab = subsView ? 'subs' : scope;
-  const currency = localStorage.getItem('flow.currency') ?? 'EUR';
+  const { currency } = useSettings();
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
   // Ouverture directe d'une transaction depuis la recherche globale.

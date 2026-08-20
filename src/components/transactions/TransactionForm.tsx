@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ImagePlus, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBadges, useCategories, useRepo } from '../../context/DataContext';
+import { useSettings } from '../../context/SettingsContext';
 import { type NewTransaction } from '../../data/repository';
 import { suggestCategory } from '../../logic/categorizer';
 import { FREQUENCY_LABELS, toISODate } from '../../logic/dates';
@@ -53,6 +54,7 @@ export function TransactionForm({ defaultScope, editing, onSaved }: TransactionF
   const categories = useCategories();
   const badges = useBadges();
   const repo = useRepo();
+  const { currency } = useSettings();
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [scope, setScope] = useState<Scope>(editing?.scope ?? defaultScope);
@@ -115,7 +117,7 @@ export function TransactionForm({ defaultScope, editing, onSaved }: TransactionF
       type,
       scope,
       amount,
-      currency: localStorage.getItem('flow.currency') ?? 'EUR',
+      currency,
       label: label.trim(),
       categoryId,
       date,

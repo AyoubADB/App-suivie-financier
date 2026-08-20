@@ -1,4 +1,5 @@
 import {
+  deleteUser,
   onAuthStateChanged,
   signInWithPopup,
   signOut as fbSignOut,
@@ -18,6 +19,8 @@ interface AuthContextValue {
   error: string | null;
   signInGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** Supprime le compte Firebase après effacement des données (RGPD). */
+  deleteAccount: () => Promise<void>;
   continueOffline: () => void;
 }
 
@@ -66,6 +69,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(LOCAL_KEY);
   }
 
+  async function deleteAccount() {
+    if (auth?.currentUser) await deleteUser(auth.currentUser);
+  }
+
   function continueOffline() {
     setLocalMode(true);
     localStorage.setItem(LOCAL_KEY, '1');
@@ -84,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         signInGoogle,
         signOut,
+        deleteAccount,
         continueOffline,
       }}
     >

@@ -1,5 +1,6 @@
 import { CalendarClock, ChartPie, LineChart, PiggyBank } from 'lucide-react';
 import { useMemo } from 'react';
+import { MigrationBanner } from '../components/MigrationBanner';
 import { PeriodSelector } from '../components/PeriodSelector';
 import { CategoryDonut } from '../components/charts/CategoryDonut';
 import { TrendChart } from '../components/charts/TrendChart';
@@ -11,20 +12,19 @@ import { DeltaPill } from '../components/ui/DeltaPill';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Segmented } from '../components/ui/Segmented';
 import { usePeriod } from '../context/PeriodContext';
+import { useSettings } from '../context/SettingsContext';
 import { useScope } from '../context/ScopeContext';
 import { useCategories, useTransactions } from '../context/DataContext';
 import { activeSubscriptions, computePeriodStats } from '../logic/analytics';
 import { formatRangeLabel, fromISODate } from '../logic/dates';
 import { formatCents, formatPct } from '../logic/money';
 
-const CURRENCY = () => localStorage.getItem('flow.currency') ?? 'EUR';
-
 export function Dashboard() {
   const txs = useTransactions();
   const categories = useCategories();
   const { scope, setScope } = useScope();
   const { period, range } = usePeriod();
-  const currency = CURRENCY();
+  const { currency, savingsGoal } = useSettings();
 
   const stats = useMemo(
     () => computePeriodStats(txs, categories, scope, period, range),
@@ -42,6 +42,8 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-col gap-4">
+      <MigrationBanner />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <Segmented
           options={[
@@ -91,7 +93,7 @@ export function Dashboard() {
           <p className={`amount text-xl font-bold ${
             stats.savingsRate === null
               ? 'text-ink-3'
-              : stats.savingsRate >= 0.2
+              : stats.savingsRate >= savingsGoal
                 ? 'text-pos'
                 : stats.savingsRate >= 0
                   ? 'text-warn'
@@ -100,7 +102,9 @@ export function Dashboard() {
           >
             {stats.savingsRate === null ? '—' : formatPct(stats.savingsRate)}
           </p>
-          <p className="mt-1.5 text-[11px] text-ink-3">objectif : 20 %</p>
+          <p className="mt-1.5 text-[11px] text-ink-3">
+            objectif : {Math.round(savingsGoal * 100)} %
+          </p>
         </Card>
       </div>
 

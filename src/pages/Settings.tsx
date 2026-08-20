@@ -23,7 +23,7 @@ import { Segmented } from '../components/ui/Segmented';
 import { IconPicker } from '../components/transactions/IconPicker';
 import { getIcon } from '../components/ui/icons';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
+import { useSettings } from '../context/SettingsContext';
 import { useBadges, useCategories, useRepo } from '../context/DataContext';
 import { type ExportPayload } from '../data/repository';
 import { CATEGORY_COLORS } from '../data/seed';
@@ -84,6 +84,62 @@ function AccountCard() {
             </p>
           )}
         </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Suppression définitive du compte et de toutes ses données (RGPD).
+ * Firebase exige une connexion récente pour cette opération.
+ */
+function DeleteAccountCard() {
+  const { user, mode, deleteAccount } = useAuth();
+  const repo = useRepo();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  if (mode !== 'cloud' || !user) return null;
+
+  async function run() {
+    const typed = window.prompt(
+      'Cette action efface définitivement ton compte et toutes tes données. Tape SUPPRIMER pour confirmer.',
+    );
+    if (typed !== 'SUPPRIMER') return;
+    setBusy(true);
+    setError('');
+    try {
+      await repo.resetAll();
+      await deleteAccount();
+    } catch (e) {
+      setError(
+        (e as { code?: string }).code === 'auth/requires-recent-login'
+          ? 'Par sécurité, reconnecte-toi puis relance la suppression.'
+          : 'Suppression impossible pour le moment.',
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <SectionTitle icon={TriangleAlert}>Supprimer mon compte</SectionTitle>
+      <p className="mb-3 text-sm text-ink-2">
+        Efface définitivement ton compte et l'intégralité de tes données. Pense à exporter tes
+        données avant : l'opération est irréversible.
+      </p>
+      <button
+        onClick={() => void run()}
+        disabled={busy}
+        className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-2xl border border-neg/40 px-4 text-sm font-medium text-neg hover:bg-neg/10 disabled:opacity-60"
+      >
+        <Trash2 size={16} />
+        {busy ? 'Suppression…' : 'Supprimer définitivement'}
+      </button>
+      {error && (
+        <p role="alert" className="mt-3 text-xs text-neg">
+          {error}
+        </p>
       )}
     </Card>
   );
@@ -238,24 +294,18 @@ function BadgeForm({ editing, onDone }: { editing: Badge | null; onDone: () => v
 // ---------------------------------------------------------------- Page
 
 export function Settings() {
-  const { theme, setTheme } = useTheme();
+  const { currency, theme, savingsGoal, synced, update } = useSettings();
   const categories = useCategories();
   const badges = useBadges();
   const repo = useRepo();
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const [currency, setCurrency] = useState(localStorage.getItem('flow.currency') ?? 'EUR');
   const [apiKey, setApiKey] = useState(localStorage.getItem('flow.apiKey') ?? '');
   const [catModal, setCatModal] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [badgeModal, setBadgeModal] = useState(false);
   const [editingBadge, setEditingBadge] = useState<Badge | null>(null);
   const [importMsg, setImportMsg] = useState('');
-
-  function saveCurrency(value: string) {
-    setCurrency(value);
-    localStorage.setItem('flow.currency', value);
-  }
 
   function saveApiKey(value: string) {
     setApiKey(value);
@@ -306,13 +356,13 @@ export function Settings() {
               { value: 'light', label: 'Clair' },
             ]}
             value={theme}
-            onChange={setTheme}
+            onChange={(t) => update({ theme: t })}
             size="sm"
           />
           {theme === 'dark' ? <Moon size={16} className="text-ink-3" /> : <Sun size={16} className="text-ink-3" />}
           <select
             value={currency}
-            onChange={(e) => saveCurrency(e.target.value)}
+            onChange={(e) => update({ currency: e.target.value })}
             aria-label="Devise"
             className="min-h-[40px] cursor-pointer rounded-2xl border border-line bg-surface-2 px-4 text-sm"
           >
@@ -321,6 +371,29 @@ export function Settings() {
             ))}
           </select>
         </div>
+
+        <label className="mt-4 block">
+          <span className="flex items-center justify-between text-sm text-ink-2">
+            Objectif de taux d'épargne
+            <span className="amount font-semibold text-ink">{Math.round(savingsGoal * 100)} %</span>
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={60}
+            step={5}
+            value={Math.round(savingsGoal * 100)}
+            onChange={(e) => update({ savingsGoal: Number(e.target.value) / 100 })}
+            className="mt-2 w-full accent-[var(--accent)]"
+          />
+        </label>
+
+        <p className="mt-3 flex items-center gap-1.5 text-[11px] text-ink-3">
+          {synced ? <Cloud size={11} /> : <CloudOff size={11} />}
+          {synced
+            ? 'Ces préférences suivent ton compte sur tous tes appareils.'
+            : 'Ces préférences sont propres à cet appareil.'}
+        </p>
       </Card>
 
       {/* Catégories */}
@@ -476,6 +549,8 @@ export function Settings() {
         </div>
         {importMsg && <p className="mt-3 text-sm text-ink-2">{importMsg}</p>}
       </Card>
+
+      <DeleteAccountCard />
 
       <Modal
         open={catModal}

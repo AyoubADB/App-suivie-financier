@@ -12,6 +12,8 @@ interface DataContextValue {
   categories: Category[];
   badges: Badge[];
   repo: FlowRepository;
+  /** Non nul uniquement en mode connecté — utilisé par la migration locale → cloud. */
+  cloudRepo: FirestoreRepository | null;
   ready: boolean;
 }
 
@@ -69,6 +71,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             categories: cloudData.categories,
             badges: cloudData.badges,
             repo: cloudRepo,
+            cloudRepo,
             ready: cloudData.ready,
           }
         : {
@@ -76,6 +79,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             categories: localCats ?? [],
             badges: localBadges ?? [],
             repo: dexieRepo,
+            cloudRepo: null,
             ready: localTx !== undefined,
           },
     [cloudRepo, cloudData, localTx, localCats, localBadges],
@@ -94,4 +98,5 @@ export const useTransactions = () => useData().transactions;
 export const useCategories = () => useData().categories;
 export const useBadges = () => useData().badges;
 export const useRepo = () => useData().repo;
+export const useCloudRepo = () => useData().cloudRepo;
 export const useDataReady = () => useData().ready;

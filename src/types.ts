@@ -85,3 +85,11 @@ export interface Insight {
   message: string;
   potentialSaving?: number; // centimes / mois
 }
+
+/** Préférences utilisateur — synchronisées par compte quand la connexion est active. */
+export interface UserSettings {
+  currency: string;
+  theme: 'dark' | 'light';
+  /** Objectif de taux d'épargne, ratio 0..1. */
+  savingsGoal: number;
+}

@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { PeriodProvider } from './context/PeriodContext';
 import { ScopeProvider } from './context/ScopeContext';
-import { ThemeProvider } from './context/ThemeContext';
+import { SettingsProvider } from './context/SettingsContext';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
 import { Movements } from './pages/Movements';
@@ -25,7 +25,8 @@ function Shell() {
 
   return (
     <DataProvider>
-      <ScopeProvider>
+      <SettingsProvider>
+        <ScopeProvider>
         <PeriodProvider>
           <BrowserRouter>
             <AppLayout>
@@ -42,17 +43,16 @@ function Shell() {
             </AppLayout>
           </BrowserRouter>
         </PeriodProvider>
-      </ScopeProvider>
+        </ScopeProvider>
+      </SettingsProvider>
     </DataProvider>
   );
 }
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <Shell />
-      </AuthProvider>
-    </ThemeProvider>
+    <AuthProvider>
+      <Shell />
+    </AuthProvider>
   );
 }
