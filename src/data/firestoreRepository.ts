@@ -38,10 +38,10 @@ export class FirestoreRepository implements FlowRepository {
     if (!cats.empty) return;
     const batch = writeBatch(this.fs);
     for (const cat of DEFAULT_CATEGORIES) {
-      batch.set(doc(this.col<Category>('categories'), cat.id), cat);
+      batch.set(doc(this.col<Category>('categories'), cat.id), stripUndefined(cat));
     }
     for (const badge of DEFAULT_BADGES) {
-      batch.set(doc(this.col<Badge>('badges'), badge.id), badge);
+      batch.set(doc(this.col<Badge>('badges'), badge.id), stripUndefined(badge));
     }
     await batch.commit();
   }
@@ -95,7 +95,7 @@ export class FirestoreRepository implements FlowRepository {
 
   async addCategory(input: Omit<Category, 'id'>): Promise<Category> {
     const cat: Category = { ...input, id: crypto.randomUUID() };
-    await setDoc(doc(this.col<Category>('categories'), cat.id), cat);
+    await setDoc(doc(this.col<Category>('categories'), cat.id), stripUndefined(cat));
     return cat;
   }
 
@@ -115,7 +115,7 @@ export class FirestoreRepository implements FlowRepository {
 
   async addBadge(input: Omit<Badge, 'id'>): Promise<Badge> {
     const badge: Badge = { ...input, id: crypto.randomUUID() };
-    await setDoc(doc(this.col<Badge>('badges'), badge.id), badge);
+    await setDoc(doc(this.col<Badge>('badges'), badge.id), stripUndefined(badge));
     return badge;
   }
 
@@ -158,10 +158,10 @@ export class FirestoreRepository implements FlowRepository {
     await this.clearAll();
     const batch = writeBatch(this.fs);
     for (const cat of payload.categories.length ? payload.categories : DEFAULT_CATEGORIES) {
-      batch.set(doc(this.col<Category>('categories'), cat.id), cat);
+      batch.set(doc(this.col<Category>('categories'), cat.id), stripUndefined(cat));
     }
     for (const badge of payload.badges.length ? payload.badges : DEFAULT_BADGES) {
-      batch.set(doc(this.col<Badge>('badges'), badge.id), badge);
+      batch.set(doc(this.col<Badge>('badges'), badge.id), stripUndefined(badge));
     }
     for (const tx of payload.transactions) {
       batch.set(doc(this.col<Transaction>('transactions'), tx.id), stripUndefined(tx));
@@ -182,6 +182,7 @@ export class FirestoreRepository implements FlowRepository {
     ]);
     const batch = writeBatch(this.fs);
     for (const d of [...txs.docs, ...cats.docs, ...badges.docs]) batch.delete(d.ref);
+    batch.delete(doc(this.fs, 'users', this.uid, 'meta', 'settings'));
     await batch.commit();
   }
 }

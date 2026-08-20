@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// FLOW — règles Cloud Storage
+//
+// Le bucket n'est pas encore utilisé par l'app (les images custom sont
+// stockées en base64 dans Firestore). Ces règles le verrouillent dès
+// maintenant : un bucket laissé ouvert est une fuite de données garantie.
+//
+// Déploiement :  firebase deploy --only storage
+// ---------------------------------------------------------------------------
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Chacun ne lit et n'écrit que dans son propre dossier.
+    match /users/{userId}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size <= 2 * 1024 * 1024
+                   && request.resource.contentType.matches('image/(png|jpeg|webp|gif)');
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Tout le reste est refusé.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

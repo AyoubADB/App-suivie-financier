@@ -6,6 +6,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { type NewTransaction } from '../../data/repository';
 import { suggestCategory } from '../../logic/categorizer';
 import { FREQUENCY_LABELS, toISODate } from '../../logic/dates';
+import { LIMITS, checkTransaction } from '../../logic/limits';
 import { parseAmountToCents } from '../../logic/money';
 import type { RecurringFrequency, Scope, Transaction, TxType } from '../../types';
 import { BadgeChip } from '../ui/BadgeChip';
@@ -102,7 +103,12 @@ export function TransactionForm({ defaultScope, editing, onSaved }: TransactionF
   async function onPickImage(file: File | undefined) {
     if (!file) return;
     try {
-      setImageUrl(await fileToDataUrl(file));
+      const dataUrl = await fileToDataUrl(file);
+      if (dataUrl.length > LIMITS.imageDataUrlMax) {
+        setError('Image trop lourde — choisis-en une plus légère.');
+        return;
+      }
+      setImageUrl(dataUrl);
     } catch {
       setError("Impossible de lire cette image.");
     }
@@ -110,8 +116,17 @@ export function TransactionForm({ defaultScope, editing, onSaved }: TransactionF
 
   async function submit() {
     const amount = parseAmountToCents(amountText);
-    if (!label.trim()) return setError('Ajoute un libellé.');
-    if (amount === null || amount <= 0) return setError('Montant invalide (ex : 12,99).');
+    if (amount === null) return setError('Montant invalide (ex : 12,99).');
+    // Mêmes bornes que les règles Firestore : on échoue ici plutôt que
+    // de laisser le serveur rejeter l'écriture sans explication.
+    const problem = checkTransaction({
+      amount,
+      label: label.trim(),
+      note: note.trim() || undefined,
+      imageUrl,
+      badges: selectedBadges,
+    });
+    if (problem) return setError(problem);
     setError('');
     const payload: NewTransaction = {
       type,
@@ -176,6 +191,7 @@ export function TransactionForm({ defaultScope, editing, onSaved }: TransactionF
           autoFocus={!editing}
           value={label}
           onChange={(e) => setLabel(e.target.value)}
+          maxLength={LIMITS.labelMax}
           placeholder={type === 'expense' ? 'Ex : Netflix, Loyer, Courses…' : 'Ex : Client HOUSELAND…'}
           className="min-h-[48px] w-full rounded-2xl border border-line bg-surface-2 px-4 text-base text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none"
         />
@@ -318,6 +334,7 @@ export function TransactionForm({ defaultScope, editing, onSaved }: TransactionF
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
+        maxLength={LIMITS.noteMax}
         placeholder="Note (optionnel)"
         rows={2}
         className="w-full rounded-2xl border border-line bg-surface-2 px-4 py-3 text-sm text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none"
