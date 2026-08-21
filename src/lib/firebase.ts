@@ -59,9 +59,15 @@ if (isFirebaseConfigured) {
   // Cache local persistant : l'app connectée fonctionne hors-ligne et
   // resynchronise à la reconnexion. Réduit aussi fortement les lectures
   // facturées, donc l'exposition aux quotas.
-  firestoreInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-  });
+  //
+  // La base visée est `(default)` sauf si VITE_FIREBASE_DATABASE_ID nomme
+  // une base Firestore nommée — cas d'un projet créé avec un ID explicite.
+  const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID?.trim();
+  firestoreInstance = initializeFirestore(
+    app,
+    { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) },
+    databaseId || undefined,
+  );
 }
 
 export const auth = authInstance;
