@@ -53,13 +53,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await signInWithPopup(auth, googleProvider);
     } catch (e) {
       const code = (e as { code?: string }).code ?? '';
-      setError(
-        code === 'auth/popup-closed-by-user'
-          ? 'Connexion annulée.'
-          : code === 'auth/unauthorized-domain'
-            ? "Ce domaine n'est pas autorisé dans Firebase (Authentication → Settings → Authorized domains)."
-            : 'Connexion impossible. Vérifie ta configuration Firebase.',
-      );
+      const known: Record<string, string> = {
+        'auth/popup-closed-by-user': 'Connexion annulée.',
+        'auth/cancelled-popup-request': 'Connexion annulée.',
+        'auth/popup-blocked':
+          'Le navigateur a bloqué la fenêtre de connexion — autorise les pop-ups pour ce site.',
+        'auth/unauthorized-domain':
+          "Ce domaine n'est pas autorisé : ajoute-le dans Firebase → Authentication → Paramètres → Domaines autorisés.",
+        'auth/operation-not-allowed':
+          'La connexion Google n\'est pas activée dans Firebase → Authentication → Méthode de connexion.',
+        'auth/invalid-api-key': 'Clé API invalide : vérifie VITE_FIREBASE_API_KEY dans ton .env.',
+        'auth/network-request-failed': 'Réseau indisponible. Vérifie ta connexion.',
+      };
+      // Le code brut est affiché quand il n'est pas répertorié : sans lui,
+      // impossible de diagnostiquer une erreur de configuration.
+      setError(known[code] ?? `Connexion impossible (${code || 'erreur inconnue'}).`);
+      console.error('[FLOW] Échec de connexion Google', code, e);
     }
   }
 
