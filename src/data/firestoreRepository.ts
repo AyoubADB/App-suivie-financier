@@ -11,7 +11,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import { computeNextDueDate } from '../logic/dates';
-import type { Badge, Budget, Category, Transaction } from '../types';
+import type { Activity, Badge, Budget, Category, Transaction } from '../types';
 import type { ExportPayload, FlowRepository, NewTransaction } from './repository';
 import { DEFAULT_BADGES, DEFAULT_CATEGORIES } from './seed';
 
@@ -74,6 +74,23 @@ export class FirestoreRepository implements FlowRepository {
 
   async deleteBudget(id: string): Promise<void> {
     await deleteDoc(doc(this.col<Budget>('budgets'), id));
+  }
+
+  subscribeActivities(cb: (rows: Activity[]) => void): () => void {
+    return onSnapshot(this.col<Activity>('activities'), (snap) =>
+      cb(snap.docs.map((d) => d.data())),
+    );
+  }
+
+  async setActivity(input: Omit<Activity, 'id'> & { id?: string }): Promise<Activity> {
+    const activity: Activity = { ...input, id: input.id ?? crypto.randomUUID() };
+    await setDoc(doc(this.col<Activity>('activities'), activity.id), stripUndefined(activity));
+    return activity;
+  }
+
+  /** Archivée plutôt que supprimée : les transactions passées gardent leur libellé. */
+  async deleteActivity(id: string): Promise<void> {
+    await updateDoc(doc(this.col<Activity>('activities'), id), { archived: true });
   }
 
   async addTransaction(input: NewTransaction): Promise<Transaction> {
@@ -151,11 +168,12 @@ export class FirestoreRepository implements FlowRepository {
   }
 
   async exportAll(): Promise<ExportPayload> {
-    const [txs, cats, badges, budgets] = await Promise.all([
+    const [txs, cats, badges, budgets, activities] = await Promise.all([
       getDocs(this.col<Transaction>('transactions')),
       getDocs(this.col<Category>('categories')),
       getDocs(this.col<Badge>('badges')),
       getDocs(this.col<Budget>('budgets')),
+      getDocs(this.col<Activity>('activities')),
     ]);
     return {
       version: 1,
@@ -164,12 +182,17 @@ export class FirestoreRepository implements FlowRepository {
       categories: cats.docs.map((d) => d.data()),
       badges: badges.docs.map((d) => d.data()),
       budgets: budgets.docs.map((d) => d.data()),
+      activities: activities.docs.map((d) => d.data()),
     };
   }
 
   async importAll(payload: ExportPayload): Promise<void> {
     if (payload.version !== 1 || !Array.isArray(payload.transactions)) {
-      throw new Error('Fichier d’import invalide.');
+      throw new Error(
+        payload?.version !== 1
+          ? `Format non reconnu (version ${String(payload?.version ?? 'absente')}). Attendu : un export FLOW version 1.`
+          : "Le fichier ne contient pas de liste de transactions — ce n'est pas un export FLOW.",
+      );
     }
     await this.clearAll();
     const batch = writeBatch(this.fs);
@@ -185,6 +208,9 @@ export class FirestoreRepository implements FlowRepository {
     for (const b of payload.budgets ?? []) {
       batch.set(doc(this.col<Budget>('budgets'), b.id), stripUndefined(b));
     }
+    for (const a of payload.activities ?? []) {
+      batch.set(doc(this.col<Activity>('activities'), a.id), stripUndefined(a));
+    }
     await batch.commit();
   }
 
@@ -194,14 +220,23 @@ export class FirestoreRepository implements FlowRepository {
   }
 
   private async clearAll(): Promise<void> {
-    const [txs, cats, badges, budgets] = await Promise.all([
+    const [txs, cats, badges, budgets, activities] = await Promise.all([
       getDocs(this.col('transactions')),
       getDocs(this.col('categories')),
       getDocs(this.col('badges')),
       getDocs(this.col('budgets')),
+      getDocs(this.col('activities')),
     ]);
     const batch = writeBatch(this.fs);
-    for (const d of [...txs.docs, ...cats.docs, ...badges.docs, ...budgets.docs]) batch.delete(d.ref);
+    for (const d of [
+      ...txs.docs,
+      ...cats.docs,
+      ...badges.docs,
+      ...budgets.docs,
+      ...activities.docs,
+    ]) {
+      batch.delete(d.ref);
+    }
     batch.delete(doc(this.fs, 'users', this.uid, 'meta', 'settings'));
     await batch.commit();
   }

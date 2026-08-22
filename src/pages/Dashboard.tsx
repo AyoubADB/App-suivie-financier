@@ -25,7 +25,7 @@ export function Dashboard() {
   const categories = useCategories();
   const { scope, setScope } = useScope();
   const { period, range } = usePeriod();
-  const { currency, savingsGoal } = useSettings();
+  const { currency, savingsGoal, proEnabled } = useSettings();
 
   const stats = useMemo(
     () => computePeriodStats(txs, categories, scope, period, range),
@@ -46,16 +46,18 @@ export function Dashboard() {
       <MigrationBanner />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Segmented
-          options={[
-            { value: 'both', label: 'Tout' },
-            { value: 'perso', label: 'Perso' },
-            { value: 'pro', label: 'Pro' },
-          ]}
-          value={scope}
-          onChange={setScope}
-          size="sm"
-        />
+        {proEnabled && (
+          <Segmented
+            options={[
+              { value: 'both', label: 'Tout' },
+              { value: 'perso', label: 'Perso' },
+              { value: 'pro', label: 'Pro' },
+            ]}
+            value={scope}
+            onChange={setScope}
+            size="sm"
+          />
+        )}
         <div className="flex-1">
           <PeriodSelector />
         </div>

@@ -11,40 +11,47 @@ import { Card } from '../components/ui/Card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Modal } from '../components/ui/Modal';
 import { Segmented } from '../components/ui/Segmented';
+import { getIcon } from '../components/ui/icons';
 import { usePeriod } from '../context/PeriodContext';
-import { useScope } from '../context/ScopeContext';
 import { useSettings } from '../context/SettingsContext';
-import { useBadges, useCategories, useRepo, useTransactions } from '../context/DataContext';
+import {
+  useActivities,
+  useBadges,
+  useCategories,
+  useRepo,
+  useTransactions,
+} from '../context/DataContext';
 import { dormantSubscriptions, inRange, monthlyEquivalent, yearlyEquivalent } from '../logic/analytics';
 import { normalize } from '../logic/categorizer';
 import { FREQUENCY_LABELS, fromISODate } from '../logic/dates';
 import { formatCents, formatCentsCompact } from '../logic/money';
-import type { Scope, ScopeFilter, Transaction, TxType } from '../types';
+import type { Scope, Transaction, TxType } from '../types';
 
-type Tab = ScopeFilter | 'subs';
 type TypeFilter = TxType | 'all';
 type SortKey = 'amount' | 'due';
 
-const TABS: Array<{ value: Tab; label: string }> = [
-  { value: 'both', label: 'Tout' },
-  { value: 'perso', label: 'Perso' },
-  { value: 'pro', label: 'Pro' },
-  { value: 'subs', label: 'Abonnements' },
-];
+/** Filtre « toutes activités » — distinct d'une activité réellement choisie. */
+const ALL_ACTIVITIES = '__all__';
+
+interface MovementsProps {
+  /** Fixé par la route : /perso ou /pro. Le module Pro éteint force 'perso'. */
+  scope: Scope;
+}
 
 /**
- * Écran unique regroupant Perso, Pro et Abonnements.
- * Les onglets pilotent le scope global — plus de double barre de navigation.
+ * Liste des mouvements d'un scope, avec bascule vers la vue Abonnements.
+ * En Pro, un second niveau permet de filtrer par activité.
  */
-export function Movements() {
+export function Movements({ scope }: MovementsProps) {
   const txs = useTransactions();
   const categories = useCategories();
   const badges = useBadges();
+  const activities = useActivities();
   const repo = useRepo();
-  const { scope, setScope } = useScope();
   const { range } = usePeriod();
 
   const [subsView, setSubsView] = useState(false);
+  const [activityFilter, setActivityFilter] = useState<string>(ALL_ACTIVITIES);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -54,8 +61,8 @@ export function Movements() {
   const [showFilters, setShowFilters] = useState(false);
   const [sort, setSort] = useState<SortKey>('amount');
 
-  const tab: Tab = subsView ? 'subs' : scope;
   const { currency } = useSettings();
+  const liveActivities = useMemo(() => activities.filter((a) => !a.archived), [activities]);
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
 
   // Ouverture directe d'une transaction depuis la recherche globale.
@@ -71,18 +78,16 @@ export function Movements() {
     }
   }, [requestedId, txs, setParams]);
 
-  function selectTab(next: Tab) {
-    if (next === 'subs') {
-      setSubsView(true);
-    } else {
-      setSubsView(false);
-      setScope(next);
-    }
-  }
-
   const inScope = useMemo(
-    () => txs.filter((tx) => scope === 'both' || tx.scope === scope),
-    [txs, scope],
+    () =>
+      txs.filter(
+        (tx) =>
+          tx.scope === scope &&
+          (scope !== 'pro' ||
+            activityFilter === ALL_ACTIVITIES ||
+            tx.activityId === activityFilter),
+      ),
+    [txs, scope, activityFilter],
   );
 
   /** Filtres communs aux deux vues (recherche, type, catégorie, badge). */
@@ -129,7 +134,7 @@ export function Movements() {
     () => inScope.filter((tx) => tx.isRecurring).filter(matchesFilters),
     [inScope, matchesFilters],
   );
-  const subSections: Scope[] = scope === 'both' ? ['perso', 'pro'] : [scope];
+  const subSections: Scope[] = [scope];
   const globalMonthly = allSubs
     .filter((tx) => tx.type === 'expense')
     .reduce((acc, tx) => acc + monthlyEquivalent(tx), 0);
@@ -148,20 +153,24 @@ export function Movements() {
     if (window.confirm(`Supprimer « ${tx.label} » ?`)) await repo.deleteTransaction(tx.id);
   }
 
-  const usedCategories = categories.filter((c) => scope === 'both' || c.scope === 'both' || c.scope === scope);
+  const usedCategories = categories.filter((c) => c.scope === 'both' || c.scope === scope);
   const filtersActive = typeFilter !== 'all' || categoryFilter !== 'all' || badgeFilter !== null;
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Onglets — remplacent les 3 pages séparées */}
+      {/* Vue : mouvements ou abonnements. Le scope vient de la route. */}
       <div className="scrollbar-none -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
-        {TABS.map((t) => (
+        {[
+          { value: false, label: 'Mouvements' },
+          { value: true, label: 'Abonnements' },
+        ].map((t) => (
           <button
-            key={t.value}
-            onClick={() => selectTab(t.value)}
-            aria-current={tab === t.value}
+            key={String(t.value)}
+            type="button"
+            onClick={() => setSubsView(t.value)}
+            aria-current={subsView === t.value}
             className={`min-h-[40px] shrink-0 cursor-pointer rounded-2xl px-4 text-sm font-semibold transition-colors ${
-              tab === t.value
+              subsView === t.value
                 ? 'bg-gradient-flow text-white shadow-lg shadow-accent/20'
                 : 'glass text-ink-2 hover:text-ink'
             }`}
@@ -171,13 +180,44 @@ export function Movements() {
         ))}
       </div>
 
-      {subsView ? (
-        <p className="px-1 text-[11px] text-ink-3">
-          Portée : {scope === 'both' ? 'perso + pro' : scope} — change-la depuis les onglets.
-        </p>
-      ) : (
-        <PeriodSelector />
+      {/* Second niveau : les activités, propres au Pro */}
+      {scope === 'pro' && liveActivities.length > 0 && (
+        <div className="scrollbar-none -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+          <button
+            type="button"
+            onClick={() => setActivityFilter(ALL_ACTIVITIES)}
+            aria-current={activityFilter === ALL_ACTIVITIES}
+            className={`min-h-[34px] shrink-0 cursor-pointer rounded-full px-3.5 text-xs font-medium transition-colors ${
+              activityFilter === ALL_ACTIVITIES
+                ? 'bg-surface-2 text-ink ring-1 ring-line'
+                : 'text-ink-3 hover:text-ink-2'
+            }`}
+          >
+            Toutes les activités
+          </button>
+          {liveActivities.map((a) => {
+            const active = activityFilter === a.id;
+            const Icon = getIcon(a.icon);
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => setActivityFilter(a.id)}
+                aria-current={active}
+                style={active ? { background: `${a.color}22`, color: a.color } : undefined}
+                className={`flex min-h-[34px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition-colors ${
+                  active ? 'ring-1' : 'text-ink-3 hover:text-ink-2'
+                }`}
+              >
+                <Icon size={12} />
+                {a.label}
+              </button>
+            );
+          })}
+        </div>
       )}
+
+      {!subsView && <PeriodSelector />}
 
       {/* Recherche + filtres */}
       <div className="flex items-center gap-2">
@@ -453,7 +493,8 @@ export function Movements() {
       >
         <TransactionForm
           key={editing?.id ?? 'new'}
-          defaultScope={scope === 'both' ? 'perso' : scope}
+          defaultScope={scope}
+          defaultActivityId={activityFilter === ALL_ACTIVITIES ? undefined : activityFilter}
           editing={editing}
           onSaved={() => setFormOpen(false)}
         />

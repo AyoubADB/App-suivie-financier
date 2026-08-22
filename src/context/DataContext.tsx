@@ -4,7 +4,7 @@ import { db } from '../data/db';
 import { FirestoreRepository } from '../data/firestoreRepository';
 import { repo as dexieRepo, type FlowRepository } from '../data/repository';
 import { firestore } from '../lib/firebase';
-import type { Badge, Budget, Category, Transaction } from '../types';
+import type { Activity, Badge, Budget, Category, Transaction } from '../types';
 import { useAuth } from './AuthContext';
 
 interface DataContextValue {
@@ -12,6 +12,7 @@ interface DataContextValue {
   categories: Category[];
   badges: Badge[];
   budgets: Budget[];
+  activities: Activity[];
   repo: FlowRepository;
   /** Non nul uniquement en mode connecté — utilisé par la migration locale → cloud. */
   cloudRepo: FirestoreRepository | null;
@@ -34,12 +35,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     categories: Category[];
     badges: Badge[];
     budgets: Budget[];
+    activities: Activity[];
     ready: boolean;
-  }>({ transactions: [], categories: [], badges: [], budgets: [], ready: false });
+  }>({ transactions: [], categories: [], badges: [], budgets: [], activities: [], ready: false });
 
   useEffect(() => {
     if (!cloudRepo) {
-      setCloudData({ transactions: [], categories: [], badges: [], budgets: [], ready: false });
+      setCloudData({
+        transactions: [],
+        categories: [],
+        badges: [],
+        budgets: [],
+        activities: [],
+        ready: false,
+      });
       return;
     }
     let cancelled = false;
@@ -57,6 +66,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       cloudRepo.subscribeBudgets((budgets) => {
         if (!cancelled) setCloudData((d) => ({ ...d, budgets }));
       }),
+      cloudRepo.subscribeActivities((activities) => {
+        if (!cancelled) setCloudData((d) => ({ ...d, activities }));
+      }),
     ];
     return () => {
       cancelled = true;
@@ -68,6 +80,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const localCats = useLiveQuery(() => db.categories.toArray(), []);
   const localBadges = useLiveQuery(() => db.badges.toArray(), []);
   const localBudgets = useLiveQuery(() => db.budgets.toArray(), []);
+  const localActivities = useLiveQuery(() => db.activities.toArray(), []);
 
   const value = useMemo<DataContextValue>(
     () =>
@@ -77,6 +90,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             categories: cloudData.categories,
             badges: cloudData.badges,
             budgets: cloudData.budgets,
+            activities: cloudData.activities,
             repo: cloudRepo,
             cloudRepo,
             ready: cloudData.ready,
@@ -86,11 +100,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
             categories: localCats ?? [],
             badges: localBadges ?? [],
             budgets: localBudgets ?? [],
+            activities: localActivities ?? [],
             repo: dexieRepo,
             cloudRepo: null,
             ready: localTx !== undefined,
           },
-    [cloudRepo, cloudData, localTx, localCats, localBadges, localBudgets],
+    [cloudRepo, cloudData, localTx, localCats, localBadges, localBudgets, localActivities],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
@@ -106,6 +121,7 @@ export const useTransactions = () => useData().transactions;
 export const useCategories = () => useData().categories;
 export const useBadges = () => useData().badges;
 export const useBudgets = () => useData().budgets;
+export const useActivities = () => useData().activities;
 export const useRepo = () => useData().repo;
 export const useCloudRepo = () => useData().cloudRepo;
 export const useDataReady = () => useData().ready;

@@ -21,12 +21,17 @@ function loadScope(fallback: ScopeFilter): ScopeFilter {
 }
 
 export function ScopeProvider({ children }: { children: ReactNode }) {
-  const { defaultScope } = useSettings();
-  const [scope, setScope] = useState<ScopeFilter>(() => loadScope(defaultScope));
+  const { defaultScope, proEnabled } = useSettings();
+  const [stored, setStored] = useState<ScopeFilter>(() => loadScope(defaultScope));
+
+  // Module Pro éteint : l'app est purement personnelle, la notion de scope
+  // disparaît de l'interface comme des calculs.
+  const scope: ScopeFilter = proEnabled ? stored : 'perso';
+  const setScope = proEnabled ? setStored : () => undefined;
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, scope);
-  }, [scope]);
+    if (proEnabled) localStorage.setItem(STORAGE_KEY, scope);
+  }, [scope, proEnabled]);
 
   return <ScopeContext.Provider value={{ scope, setScope }}>{children}</ScopeContext.Provider>;
 }

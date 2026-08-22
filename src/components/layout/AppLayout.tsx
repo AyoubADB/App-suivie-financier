@@ -1,16 +1,40 @@
 import { motion } from 'framer-motion';
-import { ArrowLeftRight, Cloud, CloudOff, LayoutDashboard, Search, Settings } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Briefcase,
+  Cloud,
+  CloudOff,
+  LayoutDashboard,
+  Search,
+  Settings,
+  User,
+} from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useSettings } from '../../context/SettingsContext';
 import { AccountMenu } from '../AccountMenu';
 import { GlobalSearch } from '../GlobalSearch';
 
-const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/mouvements', label: 'Mouvements', icon: ArrowLeftRight },
-  { to: '/reglages', label: 'Réglages', icon: Settings },
-];
+/**
+ * Le module Pro éteint, l'app n'a qu'un seul univers : une entrée
+ * « Mouvements » suffit. Activé, Perso et Pro deviennent deux vraies pages,
+ * et « Vue d'ensemble » réunit les deux.
+ */
+function navItems(proEnabled: boolean) {
+  return proEnabled
+    ? [
+        { to: '/', label: "Vue d'ensemble", icon: LayoutDashboard },
+        { to: '/perso', label: 'Perso', icon: User },
+        { to: '/pro', label: 'Pro', icon: Briefcase },
+        { to: '/reglages', label: 'Réglages', icon: Settings },
+      ]
+    : [
+        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/mouvements', label: 'Mouvements', icon: ArrowLeftRight },
+        { to: '/reglages', label: 'Réglages', icon: Settings },
+      ];
+}
 
 function Logo() {
   return (
@@ -25,6 +49,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { mode } = useAuth();
+  const { proEnabled } = useSettings();
+  const NAV_ITEMS = navItems(proEnabled);
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {

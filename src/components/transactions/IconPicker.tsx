@@ -13,8 +13,8 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
         const active = value === name;
         return (
           <button
-            key={name}
             type="button"
+            key={name}
             title={name}
             onClick={() => onChange(name)}
             className={`flex h-9 w-full cursor-pointer items-center justify-center rounded-xl transition-colors ${

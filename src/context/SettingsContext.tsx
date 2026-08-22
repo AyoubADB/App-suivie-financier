@@ -9,8 +9,11 @@ const DEFAULTS: UserSettings = {
   theme: 'dark',
   savingsGoal: 0.2,
   monthStartDay: 1,
-  defaultScope: 'both',
+  defaultScope: 'perso',
   privacyMode: false,
+  usage: 'perso',
+  proEnabled: false,
+  onboarded: false,
 };
 
 /** Cache local : évite un flash de thème au chargement et sert de source en mode hors-ligne. */
@@ -20,6 +23,12 @@ interface SettingsContextValue extends UserSettings {
   update: (patch: Partial<UserSettings>) => void;
   /** true quand les préférences suivent le compte plutôt que l'appareil. */
   synced: boolean;
+  /**
+   * Message d'erreur si la dernière écriture a été refusée par le serveur.
+   * Sans lui, un refus des règles Firestore se traduit par un réglage qui
+   * revient en arrière sans la moindre explication.
+   */
+  error: string | null;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -45,6 +54,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const { user, mode } = useAuth();
   const uid = mode === 'cloud' ? (user?.uid ?? null) : null;
   const [settings, setSettings] = useState<UserSettings>(readCache);
+  const [error, setError] = useState<string | null>(null);
 
   // Abonnement au document de préférences du compte connecté.
   useEffect(() => {
@@ -72,17 +82,27 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     () => ({
       ...settings,
       synced: uid !== null,
+      error,
       update: (patch) => {
+        setError(null);
         setSettings((s) => {
           const next = { ...s, ...patch };
           if (firestore && uid) {
-            void setDoc(doc(firestore, 'users', uid, 'meta', 'settings'), next);
+            setDoc(doc(firestore, 'users', uid, 'meta', 'settings'), next).catch((e) => {
+              const code = (e as { code?: string }).code ?? '';
+              setError(
+                code === 'permission-denied'
+                  ? "Réglage refusé par le serveur. Déploie les règles à jour : firebase deploy --only firestore:rules"
+                  : `Enregistrement impossible (${code || 'erreur inconnue'}).`,
+              );
+              console.error('[FLOW] Écriture des préférences refusée', code, e);
+            });
           }
           return next;
         });
       },
     }),
-    [settings, uid],
+    [settings, uid, error],
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

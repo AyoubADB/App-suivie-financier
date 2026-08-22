@@ -1,6 +1,8 @@
 import {
+  Briefcase,
   Cloud,
   CloudOff,
+  HardDrive,
   Download,
   KeyRound,
   LogOut,
@@ -22,6 +24,8 @@ import { Modal } from '../components/ui/Modal';
 import { Segmented } from '../components/ui/Segmented';
 import { IconPicker } from '../components/transactions/IconPicker';
 import { getIcon } from '../components/ui/icons';
+import { ActivitiesCard } from '../components/pro/ActivitiesCard';
+import { db } from '../data/db';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useBadges, useCategories, useRepo } from '../context/DataContext';
@@ -141,6 +145,88 @@ function DeleteAccountCard() {
           {error}
         </p>
       )}
+    </Card>
+  );
+}
+
+/** Activation du module professionnel et gestion des activités. */
+function ProModuleCard() {
+  const { proEnabled, usage, update, error } = useSettings();
+
+  return (
+    <>
+      <Card>
+        <SectionTitle icon={Briefcase}>Module professionnel</SectionTitle>
+        <div className="flex items-start justify-between gap-4">
+          <p className="text-sm text-ink-2">
+            Sépare tes finances personnelles de ton activité indépendante, et permet de suivre
+            plusieurs activités séparément. Laisse-le éteint si tu n'as qu'un salaire.
+          </p>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={proEnabled}
+            aria-label="Activer le module professionnel"
+            onClick={() =>
+              update({
+                proEnabled: !proEnabled,
+                usage: !proEnabled && usage === 'perso' ? 'both' : usage,
+                defaultScope: !proEnabled ? 'both' : 'perso',
+              })
+            }
+            className={`relative mt-1 h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors ${
+              proEnabled ? 'bg-gradient-flow' : 'bg-surface-2'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                proEnabled ? 'translate-x-5.5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+        {error && (
+          <p role="alert" className="mt-3 rounded-2xl bg-neg/10 px-4 py-2.5 text-xs text-neg">
+            {error}
+          </p>
+        )}
+      </Card>
+
+      {proEnabled && <ActivitiesCard />}
+    </>
+  );
+}
+
+/** Efface la base IndexedDB de cet appareil, sans toucher au compte. */
+function LocalDataCard() {
+  const { mode } = useAuth();
+  const [msg, setMsg] = useState('');
+
+  async function wipe() {
+    if (!window.confirm("Effacer toutes les données stockées dans ce navigateur ? Ton compte n'est pas touché.")) {
+      return;
+    }
+    await db.delete();
+    setMsg('Données locales effacées. Recharge la page pour repartir de zéro.');
+  }
+
+  return (
+    <Card>
+      <SectionTitle icon={HardDrive}>Données de cet appareil</SectionTitle>
+      <p className="mb-3 text-sm text-ink-2">
+        {mode === 'cloud'
+          ? "Ton compte est la source de vérité. La base locale de ce navigateur ne sert plus qu'au mode hors-ligne — l'effacer met fin aux propositions d'import à chaque connexion."
+          : 'Tes données vivent dans ce navigateur. Les effacer est irréversible : exporte-les avant.'}
+      </p>
+      <button
+        type="button"
+        onClick={() => void wipe()}
+        className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-2xl border border-neg/40 px-4 text-sm font-medium text-neg hover:bg-neg/10"
+      >
+        <Trash2 size={16} />
+        Effacer les données locales
+      </button>
+      {msg && <p className="mt-3 text-sm text-pos">{msg}</p>}
     </Card>
   );
 }
@@ -294,7 +380,8 @@ function BadgeForm({ editing, onDone }: { editing: Badge | null; onDone: () => v
 // ---------------------------------------------------------------- Page
 
 export function Settings() {
-  const { currency, theme, savingsGoal, monthStartDay, defaultScope, synced, update } = useSettings();
+  const { currency, theme, savingsGoal, monthStartDay, defaultScope, proEnabled, synced, update } =
+    useSettings();
   const categories = useCategories();
   const badges = useBadges();
   const repo = useRepo();
@@ -345,6 +432,8 @@ export function Settings() {
   return (
     <div className="flex flex-col gap-4">
       <AccountCard />
+
+      <ProModuleCard />
 
       {/* Apparence & devise */}
       <Card>
@@ -407,20 +496,22 @@ export function Settings() {
             </span>
           </label>
 
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm text-ink-2">Vue par défaut au démarrage</span>
-            <Segmented
-              options={[
-                { value: 'both', label: 'Tout' },
-                { value: 'perso', label: 'Perso' },
-                { value: 'pro', label: 'Pro' },
-              ]}
-              value={defaultScope}
-              onChange={(v) => update({ defaultScope: v })}
-              size="sm"
-              className="self-start"
-            />
-          </div>
+          {proEnabled && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm text-ink-2">Vue par défaut au démarrage</span>
+              <Segmented
+                options={[
+                  { value: 'both', label: 'Tout' },
+                  { value: 'perso', label: 'Perso' },
+                  { value: 'pro', label: 'Pro' },
+                ]}
+                value={defaultScope}
+                onChange={(v) => update({ defaultScope: v })}
+                size="sm"
+                className="self-start"
+              />
+            </div>
+          )}
         </div>
 
         <p className="mt-4 flex items-center gap-1.5 text-[11px] text-ink-3">
@@ -584,6 +675,8 @@ export function Settings() {
         </div>
         {importMsg && <p className="mt-3 text-sm text-ink-2">{importMsg}</p>}
       </Card>
+
+      <LocalDataCard />
 
       <DeleteAccountCard />
 

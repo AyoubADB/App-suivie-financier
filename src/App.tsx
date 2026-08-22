@@ -8,7 +8,9 @@ import { SettingsProvider } from './context/SettingsContext';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
 import { Movements } from './pages/Movements';
+import { Onboarding } from './pages/Onboarding';
 import { Settings } from './pages/Settings';
+import { useSettings } from './context/SettingsContext';
 
 function Shell() {
   const { loading, needsLogin } = useAuth();
@@ -26,26 +28,49 @@ function Shell() {
   return (
     <DataProvider>
       <SettingsProvider>
-        <ScopeProvider>
-        <PeriodProvider>
-          <BrowserRouter>
-            <AppLayout>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/mouvements" element={<Movements />} />
-                <Route path="/reglages" element={<Settings />} />
-                {/* Anciennes routes — redirigées vers l'écran unifié */}
-                <Route path="/perso" element={<Navigate to="/mouvements" replace />} />
-                <Route path="/pro" element={<Navigate to="/mouvements" replace />} />
-                <Route path="/abonnements" element={<Navigate to="/mouvements" replace />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </AppLayout>
-          </BrowserRouter>
-        </PeriodProvider>
-        </ScopeProvider>
+        <Routed />
       </SettingsProvider>
     </DataProvider>
+  );
+}
+
+/** Routes et navigation, dépendantes des préférences donc rendues sous <SettingsProvider>. */
+function Routed() {
+  const { onboarded, proEnabled } = useSettings();
+  const { mode } = useAuth();
+
+  // Le questionnaire d'accueil ne concerne que les comptes : en mode local,
+  // on entre directement dans l'application.
+  if (mode === 'cloud' && !onboarded) return <Onboarding />;
+
+  return (
+    <ScopeProvider>
+      <PeriodProvider>
+        <BrowserRouter>
+          <AppLayout>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/reglages" element={<Settings />} />
+              {proEnabled ? (
+                <>
+                  <Route path="/perso" element={<Movements scope="perso" />} />
+                  <Route path="/pro" element={<Movements scope="pro" />} />
+                  <Route path="/mouvements" element={<Navigate to="/perso" replace />} />
+                </>
+              ) : (
+                <>
+                  <Route path="/mouvements" element={<Movements scope="perso" />} />
+                  <Route path="/perso" element={<Navigate to="/mouvements" replace />} />
+                  <Route path="/pro" element={<Navigate to="/mouvements" replace />} />
+                </>
+              )}
+              <Route path="/abonnements" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </AppLayout>
+        </BrowserRouter>
+      </PeriodProvider>
+    </ScopeProvider>
   );
 }
 

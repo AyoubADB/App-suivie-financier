@@ -66,13 +66,19 @@ export function AccountMenu() {
         aria-label="Mon compte"
         className="flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-full ring-1 ring-line transition-transform active:scale-95"
       >
-        {user?.photoURL ? (
-          <img src={user.photoURL} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <span className="bg-gradient-flow flex h-full w-full items-center justify-center text-sm font-bold text-white">
-            {user ? initial : <CloudOff size={16} />}
-          </span>
-        )}
+        {/* L'initiale s'affiche tout de suite ; la photo Google la recouvre
+            une fois chargée, ce qui évite un trou visuel à la connexion. */}
+        <span className="bg-gradient-flow relative flex h-full w-full items-center justify-center text-sm font-bold text-white">
+          {user ? initial : <CloudOff size={16} />}
+          {user?.photoURL && (
+            <img
+              src={user.photoURL}
+              alt=""
+              loading="eager"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          )}
+        </span>
       </button>
 
       <AnimatePresence>
@@ -87,13 +93,16 @@ export function AccountMenu() {
           >
             {/* Identité */}
             <div className="flex items-center gap-3 border-b border-line p-4">
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt="" className="h-10 w-10 shrink-0 rounded-full" />
-              ) : (
-                <span className="bg-gradient-flow flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white">
-                  {user ? initial : <CloudOff size={16} />}
-                </span>
-              )}
+              <span className="bg-gradient-flow relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-bold text-white">
+                {user ? initial : <CloudOff size={16} />}
+                {user?.photoURL && (
+                  <img
+                    src={user.photoURL}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                )}
+              </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">
                   {user?.displayName ?? (mode === 'cloud' ? 'Mon compte' : 'Mode local')}

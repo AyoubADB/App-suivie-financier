@@ -17,6 +17,8 @@ export function BadgeChip({ badge, active = true, onClick, size = 'sm' }: BadgeC
   const Tag = onClick ? 'button' : 'span';
   return (
     <Tag
+      // Sans `type`, un bouton dans un formulaire vaut submit et l'envoie.
+      type={onClick ? 'button' : undefined}
       onClick={onClick}
       style={style}
       className={`inline-flex items-center gap-1 rounded-full border font-medium ${pad} ${

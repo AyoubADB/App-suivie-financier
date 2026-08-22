@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ImagePlus, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useBadges, useCategories, useRepo } from '../../context/DataContext';
+import { useActivities, useBadges, useCategories, useRepo } from '../../context/DataContext';
 import { useSettings } from '../../context/SettingsContext';
 import { type NewTransaction } from '../../data/repository';
 import { suggestCategory } from '../../logic/categorizer';
@@ -17,6 +17,8 @@ import { TxVisual } from './TxVisual';
 interface TransactionFormProps {
   /** Scope pré-sélectionné ; reste modifiable dans le formulaire. */
   defaultScope: Scope;
+  /** Activité pré-sélectionnée quand on saisit depuis une activité filtrée. */
+  defaultActivityId?: string;
   /** Transaction existante → mode édition. */
   editing?: Transaction | null;
   onSaved: () => void;
@@ -51,14 +53,24 @@ async function fileToDataUrl(file: File): Promise<string> {
   return canvas.toDataURL('image/webp', 0.85);
 }
 
-export function TransactionForm({ defaultScope, editing, onSaved }: TransactionFormProps) {
+export function TransactionForm({
+  defaultScope,
+  defaultActivityId,
+  editing,
+  onSaved,
+}: TransactionFormProps) {
   const categories = useCategories();
   const badges = useBadges();
   const repo = useRepo();
-  const { currency } = useSettings();
+  const activities = useActivities();
+  const { currency, proEnabled } = useSettings();
+  const liveActivities = activities.filter((a) => !a.archived);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [scope, setScope] = useState<Scope>(editing?.scope ?? defaultScope);
+  const [activityId, setActivityId] = useState<string>(
+    editing?.activityId ?? defaultActivityId ?? '',
+  );
   const [type, setType] = useState<TxType>(editing?.type ?? 'expense');
   const [label, setLabel] = useState(editing?.label ?? '');
   const [amountText, setAmountText] = useState(
@@ -141,6 +153,8 @@ export function TransactionForm({ defaultScope, editing, onSaved }: TransactionF
       iconOverride,
       imageUrl,
       badges: selectedBadges,
+      // L'activité n'a de sens qu'en pro : on ne la stocke jamais côté perso.
+      activityId: scope === 'pro' && activityId ? activityId : undefined,
       note: note.trim() || undefined,
     };
     if (editing) await repo.updateTransaction(editing.id, payload);
@@ -166,16 +180,36 @@ export function TransactionForm({ defaultScope, editing, onSaved }: TransactionF
           onChange={(t) => setType(t)}
           size="sm"
         />
-        <Segmented
-          options={[
-            { value: 'perso', label: 'Perso' },
-            { value: 'pro', label: 'Pro' },
-          ]}
-          value={scope}
-          onChange={(s) => setScope(s)}
-          size="sm"
-        />
+        {proEnabled && (
+          <Segmented
+            options={[
+              { value: 'perso', label: 'Perso' },
+              { value: 'pro', label: 'Pro' },
+            ]}
+            value={scope}
+            onChange={(s) => setScope(s)}
+            size="sm"
+          />
+        )}
       </div>
+
+      {proEnabled && scope === 'pro' && liveActivities.length > 0 && (
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-ink-2">Activité</span>
+          <select
+            value={activityId}
+            onChange={(e) => setActivityId(e.target.value)}
+            className="min-h-[44px] w-full cursor-pointer rounded-2xl border border-line bg-surface-2 px-4 text-sm"
+          >
+            <option value="">Sans activité</option>
+            {liveActivities.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {/* Libellé → catégorisation auto */}
       <div className="flex items-center gap-3">

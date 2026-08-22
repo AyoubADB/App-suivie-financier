@@ -50,7 +50,7 @@ service cloud.firestore {
                   'id', 'type', 'scope', 'amount', 'currency', 'label',
                   'categoryId', 'date', 'isRecurring', 'recurringFrequency',
                   'nextDueDate', 'iconOverride', 'imageUrl', 'badges', 'note',
-                  'createdAt', 'updatedAt'
+                  'activityId', 'createdAt', 'updatedAt'
                 ])
              && d.id == txId
              && d.type in ['expense', 'revenue']
@@ -65,6 +65,7 @@ service cloud.firestore {
              && (!('recurringFrequency' in d)
                  || d.recurringFrequency in ['weekly', 'monthly', 'quarterly', 'yearly'])
              && (!('nextDueDate' in d) || isIsoDate(d.nextDueDate))
+             && optionalStr(d, 'activityId', 64)
              && optionalStr(d, 'iconOverride', 48)
              && optionalStr(d, 'note', 800)
              // Image en base64 : bornée pour rester sous la limite de 1 Mio/document.
@@ -104,7 +105,8 @@ service cloud.firestore {
     function validSettings(d) {
       return d.keys().hasOnly([
                'currency', 'theme', 'savingsGoal',
-               'monthStartDay', 'defaultScope', 'privacyMode'
+               'monthStartDay', 'defaultScope', 'privacyMode',
+               'usage', 'proEnabled', 'onboarded'
              ])
              && str(d.currency, 5)
              && d.theme in ['dark', 'light']
@@ -114,7 +116,10 @@ service cloud.firestore {
              && (!('monthStartDay' in d)
                  || (d.monthStartDay is int && d.monthStartDay >= 1 && d.monthStartDay <= 28))
              && (!('defaultScope' in d) || d.defaultScope in ['perso', 'pro', 'both'])
-             && (!('privacyMode' in d) || d.privacyMode is bool);
+             && (!('privacyMode' in d) || d.privacyMode is bool)
+             && (!('usage' in d) || d.usage in ['perso', 'pro', 'both'])
+             && (!('proEnabled' in d) || d.proEnabled is bool)
+             && (!('onboarded' in d) || d.onboarded is bool);
     }
 
     // ------------------------------------------------------------- budgets
@@ -125,6 +130,17 @@ service cloud.firestore {
              && str(d.categoryId, 64)
              && d.scope in ['perso', 'pro', 'both']
              && d.amount is int && d.amount > 0 && d.amount <= 1000000000;
+    }
+
+    // ------------------------------------------------------------ activités
+
+    function validActivity(d, activityId) {
+      return d.keys().hasOnly(['id', 'label', 'color', 'icon', 'archived'])
+             && d.id == activityId
+             && str(d.label, 60)
+             && isHexColor(d.color)
+             && str(d.icon, 48)
+             && d.archived is bool;
     }
 
     // ------------------------------------------------------------- chemins
@@ -156,6 +172,12 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
                               && validBudget(request.resource.data, budgetId);
+      }
+
+      match /activities/{activityId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+                              && validActivity(request.resource.data, activityId);
       }
 
       match /meta/settings {

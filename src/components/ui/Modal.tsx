@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ModalProps {
   open: boolean;
@@ -22,7 +23,10 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
     };
   }, [open, onClose]);
 
-  return (
+  // Rendu dans un portail : un ancêtre porteur d'un `transform` (les cartes
+  // animées par Framer Motion) redéfinirait le référent de `position: fixed`
+  // et décalerait la fenêtre.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -46,6 +50,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">{title}</h2>
               <button
+                type="button"
                 onClick={onClose}
                 aria-label="Fermer"
                 className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
@@ -57,6 +62,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

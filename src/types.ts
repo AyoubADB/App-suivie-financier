@@ -28,6 +28,8 @@ export interface Transaction {
   iconOverride?: string; // icône choisie manuellement
   imageUrl?: string; // image custom (style Notion) — remplace l'icône si présente
   badges: string[]; // ids de badges
+  /** Activité pro rattachée — pertinent uniquement quand scope vaut 'pro'. */
+  activityId?: string;
   note?: string;
   createdAt: string;
   updatedAt: string;
@@ -86,6 +88,22 @@ export interface Insight {
   potentialSaving?: number; // centimes / mois
 }
 
+/** Réponse à la question d'usage posée à la première connexion. */
+export type AppUsage = 'perso' | 'pro' | 'both';
+
+/**
+ * Activité professionnelle. Une personne peut en cumuler plusieurs
+ * (dev web, réparation, atelier…) et suivre chacune séparément.
+ */
+export interface Activity {
+  id: string;
+  label: string;
+  color: string;
+  icon: string;
+  /** Une activité archivée reste dans l'historique mais sort des sélecteurs. */
+  archived: boolean;
+}
+
 /** Préférences utilisateur — synchronisées par compte quand la connexion est active. */
 export interface UserSettings {
   currency: string;
@@ -101,6 +119,16 @@ export interface UserSettings {
   defaultScope: ScopeFilter;
   /** Masque les montants — utile en public ou pour une capture d'écran. */
   privacyMode: boolean;
+  /** Usage déclaré au premier lancement. */
+  usage: AppUsage;
+  /**
+   * Module professionnel actif. Quand il est désactivé, toute la notion de
+   * scope disparaît de l'interface : l'app se comporte comme un outil
+   * purement personnel.
+   */
+  proEnabled: boolean;
+  /** Passe à true une fois le questionnaire d'accueil terminé. */
+  onboarded: boolean;
 }
 
 /** Plafond de dépense mensuel sur une catégorie. */

@@ -228,8 +228,12 @@ export function formatPeriodTitle(period: PeriodKind, range: DateRange): string 
     }
     case 'month':
       return cap(range.from.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }));
-    case 'quarter':
-      return `T${Math.floor(range.from.getMonth() / 3) + 1} ${range.from.getFullYear()}`;
+    case 'quarter': {
+      // Le numéro seul prête à confusion : on rappelle les mois couverts.
+      const first = range.from.toLocaleDateString('fr-FR', { month: 'short' });
+      const last = range.to.toLocaleDateString('fr-FR', { month: 'short' });
+      return `T${Math.floor(range.from.getMonth() / 3) + 1} ${range.from.getFullYear()} · ${first} → ${last}`;
+    }
     case 'year':
       return `${range.from.getFullYear()}`;
     case 'custom':
