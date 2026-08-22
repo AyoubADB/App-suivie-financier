@@ -1,5 +1,6 @@
 import { CalendarClock, ChartPie, LineChart, PiggyBank } from 'lucide-react';
 import { useMemo } from 'react';
+import { BudgetSection } from '../components/budgets/BudgetSection';
 import { MigrationBanner } from '../components/MigrationBanner';
 import { PeriodSelector } from '../components/PeriodSelector';
 import { CategoryDonut } from '../components/charts/CategoryDonut';
@@ -133,6 +134,8 @@ export function Dashboard() {
           <CategoryDonut breakdown={stats.byCategory} currency={currency} />
         </Card>
       </div>
+
+      <BudgetSection />
 
       {/* Coach */}
       <CoachSection

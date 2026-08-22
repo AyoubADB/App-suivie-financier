@@ -1,4 +1,4 @@
-import type { Badge, Category, Transaction } from '../types';
+import type { Badge, Budget, Category, Transaction } from '../types';
 import { computeNextDueDate } from '../logic/dates';
 import { db } from './db';
 import { DEFAULT_BADGES, DEFAULT_CATEGORIES } from './seed';
@@ -15,6 +15,7 @@ export interface ExportPayload {
   transactions: Transaction[];
   categories: Category[];
   badges: Badge[];
+  budgets?: Budget[];
 }
 
 export type NewTransaction = Omit<Transaction, 'id' | 'createdAt' | 'updatedAt' | 'nextDueDate'>;
@@ -31,6 +32,9 @@ export interface FlowRepository {
   addBadge(input: Omit<Badge, 'id'>): Promise<Badge>;
   updateBadge(id: string, patch: Partial<Badge>): Promise<void>;
   deleteBadge(id: string): Promise<void>;
+
+  setBudget(input: Omit<Budget, 'id'> & { id?: string }): Promise<Budget>;
+  deleteBudget(id: string): Promise<void>;
 
   exportAll(): Promise<ExportPayload>;
   importAll(payload: ExportPayload): Promise<void>;
@@ -113,30 +117,59 @@ class DexieRepository implements FlowRepository {
     });
   }
 
+  async setBudget(input: Omit<Budget, 'id'> & { id?: string }): Promise<Budget> {
+    const budget: Budget = { ...input, id: input.id ?? uid() };
+    await db.budgets.put(budget);
+    return budget;
+  }
+
+  async deleteBudget(id: string): Promise<void> {
+    await db.budgets.delete(id);
+  }
+
   async exportAll(): Promise<ExportPayload> {
-    const [transactions, categories, badges] = await Promise.all([
+    const [transactions, categories, badges, budgets] = await Promise.all([
       db.transactions.toArray(),
       db.categories.toArray(),
       db.badges.toArray(),
+      db.budgets.toArray(),
     ]);
-    return { version: 1, exportedAt: new Date().toISOString(), transactions, categories, badges };
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      transactions,
+      categories,
+      badges,
+      budgets,
+    };
   }
 
   async importAll(payload: ExportPayload): Promise<void> {
     if (payload.version !== 1 || !Array.isArray(payload.transactions)) {
       throw new Error('Fichier d’import invalide.');
     }
-    await db.transaction('rw', db.transactions, db.categories, db.badges, async () => {
-      await Promise.all([db.transactions.clear(), db.categories.clear(), db.badges.clear()]);
+    await db.transaction('rw', db.transactions, db.categories, db.badges, db.budgets, async () => {
+      await Promise.all([
+        db.transactions.clear(),
+        db.categories.clear(),
+        db.badges.clear(),
+        db.budgets.clear(),
+      ]);
       await db.categories.bulkAdd(payload.categories.length ? payload.categories : DEFAULT_CATEGORIES);
       await db.badges.bulkAdd(payload.badges.length ? payload.badges : DEFAULT_BADGES);
       await db.transactions.bulkAdd(payload.transactions);
+      if (payload.budgets?.length) await db.budgets.bulkAdd(payload.budgets);
     });
   }
 
   async resetAll(): Promise<void> {
-    await db.transaction('rw', db.transactions, db.categories, db.badges, async () => {
-      await Promise.all([db.transactions.clear(), db.categories.clear(), db.badges.clear()]);
+    await db.transaction('rw', db.transactions, db.categories, db.badges, db.budgets, async () => {
+      await Promise.all([
+        db.transactions.clear(),
+        db.categories.clear(),
+        db.badges.clear(),
+        db.budgets.clear(),
+      ]);
       await db.categories.bulkAdd(DEFAULT_CATEGORIES);
       await db.badges.bulkAdd(DEFAULT_BADGES);
     });

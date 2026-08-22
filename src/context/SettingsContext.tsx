@@ -4,7 +4,14 @@ import { firestore } from '../lib/firebase';
 import type { UserSettings } from '../types';
 import { useAuth } from './AuthContext';
 
-const DEFAULTS: UserSettings = { currency: 'EUR', theme: 'dark', savingsGoal: 0.2 };
+const DEFAULTS: UserSettings = {
+  currency: 'EUR',
+  theme: 'dark',
+  savingsGoal: 0.2,
+  monthStartDay: 1,
+  defaultScope: 'both',
+  privacyMode: false,
+};
 
 /** Cache local : évite un flash de thème au chargement et sert de source en mode hors-ligne. */
 const CACHE_KEY = 'flow.settings';

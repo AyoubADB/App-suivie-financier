@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { ScopeFilter } from '../types';
+import { useSettings } from './SettingsContext';
 
 interface ScopeContextValue {
   scope: ScopeFilter;
@@ -10,13 +11,18 @@ const STORAGE_KEY = 'flow.scope';
 
 const ScopeContext = createContext<ScopeContextValue | null>(null);
 
-function loadScope(): ScopeFilter {
+/**
+ * Le dernier scope utilisé prime ; à défaut on retombe sur la préférence
+ * de compte `defaultScope` transmise par <ScopeProvider>.
+ */
+function loadScope(fallback: ScopeFilter): ScopeFilter {
   const saved = localStorage.getItem(STORAGE_KEY);
-  return saved === 'perso' || saved === 'pro' || saved === 'both' ? saved : 'both';
+  return saved === 'perso' || saved === 'pro' || saved === 'both' ? saved : fallback;
 }
 
 export function ScopeProvider({ children }: { children: ReactNode }) {
-  const [scope, setScope] = useState<ScopeFilter>(loadScope);
+  const { defaultScope } = useSettings();
+  const [scope, setScope] = useState<ScopeFilter>(() => loadScope(defaultScope));
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, scope);

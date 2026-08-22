@@ -92,4 +92,34 @@ export interface UserSettings {
   theme: 'dark' | 'light';
   /** Objectif de taux d'épargne, ratio 0..1. */
   savingsGoal: number;
+  /**
+   * Jour de début du mois budgétaire (1–28). Permet de caler les périodes
+   * sur la date de salaire plutôt que sur le 1er du mois.
+   */
+  monthStartDay: number;
+  /** Scope ouvert par défaut au démarrage. */
+  defaultScope: ScopeFilter;
+  /** Masque les montants — utile en public ou pour une capture d'écran. */
+  privacyMode: boolean;
+}
+
+/** Plafond de dépense mensuel sur une catégorie. */
+export interface Budget {
+  id: string;
+  categoryId: string;
+  scope: ScopeFilter;
+  /** Plafond mensuel en centimes. */
+  amount: number;
+}
+
+/** État calculé d'un budget sur la période courante. */
+export interface BudgetStatus {
+  budget: Budget;
+  categoryLabel: string;
+  categoryColor: string;
+  categoryIcon: string;
+  spent: number;
+  ratio: number;
+  remaining: number;
+  level: 'ok' | 'warn' | 'over';
 }

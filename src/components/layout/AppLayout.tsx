@@ -1,15 +1,9 @@
 import { motion } from 'framer-motion';
-import {
-  ArrowLeftRight,
-  CloudOff,
-  LayoutDashboard,
-  LogOut,
-  Search,
-  Settings,
-} from 'lucide-react';
+import { ArrowLeftRight, Cloud, CloudOff, LayoutDashboard, Search, Settings } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { AccountMenu } from '../AccountMenu';
 import { GlobalSearch } from '../GlobalSearch';
 
 const NAV_ITEMS = [
@@ -30,7 +24,7 @@ function Logo() {
 export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, mode, signOut } = useAuth();
+  const { mode } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
@@ -68,35 +62,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <div className="mt-auto flex flex-col gap-2">
-          {user ? (
-            <div className="flex items-center gap-2.5 rounded-2xl bg-surface-2/60 p-2.5">
-              {user.photoURL ? (
-                <img src={user.photoURL} alt="" className="h-8 w-8 shrink-0 rounded-full" />
-              ) : (
-                <div className="bg-gradient-flow flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">
-                  {(user.displayName ?? user.email ?? '?').charAt(0).toUpperCase()}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium">{user.displayName ?? 'Mon compte'}</p>
-                <p className="truncate text-[10px] text-ink-3">Synchronisé</p>
-              </div>
-              <button
-                onClick={signOut}
-                aria-label="Se déconnecter"
-                className="shrink-0 cursor-pointer text-ink-3 transition-colors hover:text-neg"
-              >
-                <LogOut size={15} />
-              </button>
-            </div>
+        <p className="mt-auto flex items-center gap-2 text-[11px] leading-relaxed text-ink-3">
+          {mode === 'cloud' ? (
+            <>
+              <Cloud size={13} className="shrink-0" />
+              Synchronisé sur ton compte.
+            </>
           ) : (
-            <p className="flex items-center gap-2 text-[11px] leading-relaxed text-ink-3">
+            <>
               <CloudOff size={13} className="shrink-0" />
-              Mode local — données sur cet appareil uniquement.
-            </p>
+              Mode local — données sur cet appareil.
+            </>
           )}
-        </div>
+        </p>
       </aside>
 
       <div className="min-w-0 flex-1 md:pl-60">
@@ -122,13 +100,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 </kbd>
               </button>
 
-              {mode === 'cloud' && user?.photoURL && (
-                <img
-                  src={user.photoURL}
-                  alt={user.displayName ?? 'Compte'}
-                  className="h-9 w-9 rounded-full md:hidden"
-                />
-              )}
+              <AccountMenu />
             </div>
           </div>
         </header>

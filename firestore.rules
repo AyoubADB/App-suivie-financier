@@ -102,12 +102,29 @@ service cloud.firestore {
     // ---------------------------------------------------------- préférences
 
     function validSettings(d) {
-      return d.keys().hasOnly(['currency', 'theme', 'savingsGoal'])
+      return d.keys().hasOnly([
+               'currency', 'theme', 'savingsGoal',
+               'monthStartDay', 'defaultScope', 'privacyMode'
+             ])
              && str(d.currency, 5)
              && d.theme in ['dark', 'light']
              && d.savingsGoal is number
              && d.savingsGoal >= 0
-             && d.savingsGoal <= 1;
+             && d.savingsGoal <= 1
+             && (!('monthStartDay' in d)
+                 || (d.monthStartDay is int && d.monthStartDay >= 1 && d.monthStartDay <= 28))
+             && (!('defaultScope' in d) || d.defaultScope in ['perso', 'pro', 'both'])
+             && (!('privacyMode' in d) || d.privacyMode is bool);
+    }
+
+    // ------------------------------------------------------------- budgets
+
+    function validBudget(d, budgetId) {
+      return d.keys().hasOnly(['id', 'categoryId', 'scope', 'amount'])
+             && d.id == budgetId
+             && str(d.categoryId, 64)
+             && d.scope in ['perso', 'pro', 'both']
+             && d.amount is int && d.amount > 0 && d.amount <= 1000000000;
     }
 
     // ------------------------------------------------------------- chemins
@@ -133,6 +150,12 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
                               && validBadge(request.resource.data, badgeId);
+      }
+
+      match /budgets/{budgetId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+                              && validBudget(request.resource.data, budgetId);
       }
 
       match /meta/settings {

@@ -1,5 +1,6 @@
 import { animate, useMotionValue } from 'framer-motion';
 import { useEffect, useState } from 'react';
+import { useSettings } from '../../context/SettingsContext';
 import { formatCentsCompact } from '../../logic/money';
 
 interface AnimatedAmountProps {
@@ -9,7 +10,9 @@ interface AnimatedAmountProps {
 }
 
 /** Montant animé façon compteur (mono, tabular-nums). */
-export function AnimatedAmount({ cents, currency = 'EUR', className = '' }: AnimatedAmountProps) {
+export function AnimatedAmount({ cents, currency, className = '' }: AnimatedAmountProps) {
+  const settings = useSettings();
+  const cur = currency ?? settings.currency;
   const mv = useMotionValue(cents);
   const [display, setDisplay] = useState(cents);
 
@@ -22,5 +25,11 @@ export function AnimatedAmount({ cents, currency = 'EUR', className = '' }: Anim
     return controls.stop;
   }, [cents, mv]);
 
-  return <span className={`amount ${className}`}>{formatCentsCompact(display, currency)}</span>;
+  // Mode confidentialité : la mise en page reste identique, seuls les
+  // chiffres sont remplacés — pratique pour une capture ou en public.
+  if (settings.privacyMode) {
+    return <span className={`amount ${className}`}>•••••</span>;
+  }
+
+  return <span className={`amount ${className}`}>{formatCentsCompact(display, cur)}</span>;
 }

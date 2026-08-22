@@ -11,7 +11,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import { computeNextDueDate } from '../logic/dates';
-import type { Badge, Category, Transaction } from '../types';
+import type { Badge, Budget, Category, Transaction } from '../types';
 import type { ExportPayload, FlowRepository, NewTransaction } from './repository';
 import { DEFAULT_BADGES, DEFAULT_CATEGORIES } from './seed';
 
@@ -60,6 +60,20 @@ export class FirestoreRepository implements FlowRepository {
 
   subscribeBadges(cb: (rows: Badge[]) => void): () => void {
     return onSnapshot(this.col<Badge>('badges'), (snap) => cb(snap.docs.map((d) => d.data())));
+  }
+
+  subscribeBudgets(cb: (rows: Budget[]) => void): () => void {
+    return onSnapshot(this.col<Budget>('budgets'), (snap) => cb(snap.docs.map((d) => d.data())));
+  }
+
+  async setBudget(input: Omit<Budget, 'id'> & { id?: string }): Promise<Budget> {
+    const budget: Budget = { ...input, id: input.id ?? crypto.randomUUID() };
+    await setDoc(doc(this.col<Budget>('budgets'), budget.id), stripUndefined(budget));
+    return budget;
+  }
+
+  async deleteBudget(id: string): Promise<void> {
+    await deleteDoc(doc(this.col<Budget>('budgets'), id));
   }
 
   async addTransaction(input: NewTransaction): Promise<Transaction> {
@@ -137,10 +151,11 @@ export class FirestoreRepository implements FlowRepository {
   }
 
   async exportAll(): Promise<ExportPayload> {
-    const [txs, cats, badges] = await Promise.all([
+    const [txs, cats, badges, budgets] = await Promise.all([
       getDocs(this.col<Transaction>('transactions')),
       getDocs(this.col<Category>('categories')),
       getDocs(this.col<Badge>('badges')),
+      getDocs(this.col<Budget>('budgets')),
     ]);
     return {
       version: 1,
@@ -148,6 +163,7 @@ export class FirestoreRepository implements FlowRepository {
       transactions: txs.docs.map((d) => d.data()),
       categories: cats.docs.map((d) => d.data()),
       badges: badges.docs.map((d) => d.data()),
+      budgets: budgets.docs.map((d) => d.data()),
     };
   }
 
@@ -166,6 +182,9 @@ export class FirestoreRepository implements FlowRepository {
     for (const tx of payload.transactions) {
       batch.set(doc(this.col<Transaction>('transactions'), tx.id), stripUndefined(tx));
     }
+    for (const b of payload.budgets ?? []) {
+      batch.set(doc(this.col<Budget>('budgets'), b.id), stripUndefined(b));
+    }
     await batch.commit();
   }
 
@@ -175,13 +194,14 @@ export class FirestoreRepository implements FlowRepository {
   }
 
   private async clearAll(): Promise<void> {
-    const [txs, cats, badges] = await Promise.all([
+    const [txs, cats, badges, budgets] = await Promise.all([
       getDocs(this.col('transactions')),
       getDocs(this.col('categories')),
       getDocs(this.col('badges')),
+      getDocs(this.col('budgets')),
     ]);
     const batch = writeBatch(this.fs);
-    for (const d of [...txs.docs, ...cats.docs, ...badges.docs]) batch.delete(d.ref);
+    for (const d of [...txs.docs, ...cats.docs, ...badges.docs, ...budgets.docs]) batch.delete(d.ref);
     batch.delete(doc(this.fs, 'users', this.uid, 'meta', 'settings'));
     await batch.commit();
   }

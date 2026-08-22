@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { Badge, Category, Transaction } from '../types';
+import type { Badge, Budget, Category, Transaction } from '../types';
 import { DEFAULT_BADGES, DEFAULT_CATEGORIES } from './seed';
 
 export interface SettingRow {
@@ -11,6 +11,7 @@ export class FlowDB extends Dexie {
   transactions!: EntityTable<Transaction, 'id'>;
   categories!: EntityTable<Category, 'id'>;
   badges!: EntityTable<Badge, 'id'>;
+  budgets!: EntityTable<Budget, 'id'>;
   settings!: EntityTable<SettingRow, 'key'>;
 
   constructor() {
@@ -20,6 +21,9 @@ export class FlowDB extends Dexie {
       categories: 'id, scope, type',
       badges: 'id',
       settings: 'key',
+    });
+    this.version(2).stores({
+      budgets: 'id, categoryId, scope',
     });
     this.on('populate', async () => {
       await this.categories.bulkAdd(DEFAULT_CATEGORIES);

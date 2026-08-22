@@ -294,7 +294,7 @@ function BadgeForm({ editing, onDone }: { editing: Badge | null; onDone: () => v
 // ---------------------------------------------------------------- Page
 
 export function Settings() {
-  const { currency, theme, savingsGoal, synced, update } = useSettings();
+  const { currency, theme, savingsGoal, monthStartDay, defaultScope, synced, update } = useSettings();
   const categories = useCategories();
   const badges = useBadges();
   const repo = useRepo();
@@ -388,7 +388,42 @@ export function Settings() {
           />
         </label>
 
-        <p className="mt-3 flex items-center gap-1.5 text-[11px] text-ink-3">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm text-ink-2">Le mois budgétaire commence le</span>
+            <select
+              value={monthStartDay}
+              onChange={(e) => update({ monthStartDay: Number(e.target.value) })}
+              className="min-h-[40px] cursor-pointer rounded-2xl border border-line bg-surface-2 px-4 text-sm"
+            >
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+            <span className="text-[11px] text-ink-3">
+              Cale les périodes sur ta date de salaire plutôt que sur le 1er.
+            </span>
+          </label>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm text-ink-2">Vue par défaut au démarrage</span>
+            <Segmented
+              options={[
+                { value: 'both', label: 'Tout' },
+                { value: 'perso', label: 'Perso' },
+                { value: 'pro', label: 'Pro' },
+              ]}
+              value={defaultScope}
+              onChange={(v) => update({ defaultScope: v })}
+              size="sm"
+              className="self-start"
+            />
+          </div>
+        </div>
+
+        <p className="mt-4 flex items-center gap-1.5 text-[11px] text-ink-3">
           {synced ? <Cloud size={11} /> : <CloudOff size={11} />}
           {synced
             ? 'Ces préférences suivent ton compte sur tous tes appareils.'
