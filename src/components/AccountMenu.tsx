@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useRepo } from '../context/DataContext';
 import { useSettings } from '../context/SettingsContext';
+import { Switch } from './ui/Switch';
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'MAD'];
 
@@ -60,6 +61,7 @@ export function AccountMenu() {
   return (
     <div ref={wrapRef} className="relative">
       <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="menu"
@@ -124,6 +126,7 @@ export function AccountMenu() {
                 label="Thème"
                 action={
                   <button
+                    type="button"
                     onClick={() => update({ theme: theme === 'dark' ? 'light' : 'dark' })}
                     className="cursor-pointer rounded-lg bg-surface-2 px-2.5 py-1 text-xs font-medium transition-colors hover:text-accent-2"
                   >
@@ -136,20 +139,12 @@ export function AccountMenu() {
                 icon={privacyMode ? EyeOff : Eye}
                 label="Masquer les montants"
                 action={
-                  <button
-                    role="switch"
-                    aria-checked={privacyMode}
-                    onClick={() => update({ privacyMode: !privacyMode })}
-                    className={`relative h-5 w-9 cursor-pointer rounded-full transition-colors ${
-                      privacyMode ? 'bg-gradient-flow' : 'bg-surface-2'
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-                        privacyMode ? 'translate-x-4.5' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
+                  <Switch
+                    checked={privacyMode}
+                    onChange={(v) => update({ privacyMode: v })}
+                    label="Masquer les montants"
+                    size="sm"
+                  />
                 }
               />
 

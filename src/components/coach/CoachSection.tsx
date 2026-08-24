@@ -4,7 +4,14 @@ import { useState } from 'react';
 import { askAiCoach, buildCoachSummary } from '../../logic/aiCoach';
 import { generateInsights } from '../../logic/coach';
 import { formatCents } from '../../logic/money';
-import type { Category, Insight, PeriodStats, ScopeFilter, Transaction } from '../../types';
+import type {
+  BudgetStatus,
+  Category,
+  Insight,
+  PeriodStats,
+  ScopeFilter,
+  Transaction,
+} from '../../types';
 import { Card } from '../ui/Card';
 
 interface CoachSectionProps {
@@ -14,6 +21,8 @@ interface CoachSectionProps {
   scope: ScopeFilter;
   periodLabel: string;
   currency: string;
+  /** État des budgets de la période — alimente un conseil supplémentaire. */
+  budgetStatuses?: BudgetStatus[];
 }
 
 const SEVERITY_STYLE: Record<Insight['severity'], { icon: typeof Info; className: string }> = {
@@ -29,8 +38,9 @@ export function CoachSection({
   scope,
   periodLabel,
   currency,
+  budgetStatuses = [],
 }: CoachSectionProps) {
-  const insights = generateInsights(stats, allTxs, categories, scope, currency);
+  const insights = generateInsights(stats, allTxs, categories, scope, currency, budgetStatuses);
   const apiKey = localStorage.getItem('flow.apiKey') ?? '';
 
   const [aiText, setAiText] = useState('');

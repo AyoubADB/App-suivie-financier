@@ -11,6 +11,7 @@ import { parseAmountToCents } from '../../logic/money';
 import type { RecurringFrequency, Scope, Transaction, TxType } from '../../types';
 import { BadgeChip } from '../ui/BadgeChip';
 import { Segmented } from '../ui/Segmented';
+import { CategoryPicker } from './CategoryPicker';
 import { IconPicker } from './IconPicker';
 import { TxVisual } from './TxVisual';
 
@@ -108,10 +109,6 @@ export function TransactionForm({
   }, [suggestion, userTouchedCategory, userTouchedRecurring]);
 
   const category = categories.find((c) => c.id === categoryId);
-  const availableCategories = categories.filter(
-    (c) => (c.scope === 'both' || c.scope === scope) && (c.type === 'both' || c.type === type),
-  );
-
   async function onPickImage(file: File | undefined) {
     if (!file) return;
     try {
@@ -311,21 +308,16 @@ export function TransactionForm({
       </div>
 
       {/* Catégorie */}
-      <select
+      <CategoryPicker
+        categories={categories}
         value={categoryId}
-        onChange={(e) => {
-          setCategoryId(e.target.value);
+        onChange={(id) => {
+          setCategoryId(id);
           setUserTouchedCategory(true);
         }}
-        aria-label="Catégorie"
-        className="min-h-[48px] w-full cursor-pointer rounded-2xl border border-line bg-surface-2 px-4 text-sm text-ink focus:border-accent focus:outline-none"
-      >
-        {availableCategories.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.label}
-          </option>
-        ))}
-      </select>
+        scope={scope}
+        type={type}
+      />
 
       {/* Récurrence */}
       <div className="glass flex flex-wrap items-center justify-between gap-2 rounded-2xl px-4 py-3">

@@ -15,7 +15,8 @@ import { Segmented } from '../components/ui/Segmented';
 import { usePeriod } from '../context/PeriodContext';
 import { useSettings } from '../context/SettingsContext';
 import { useScope } from '../context/ScopeContext';
-import { useCategories, useTransactions } from '../context/DataContext';
+import { useBudgets, useCategories, useTransactions } from '../context/DataContext';
+import { computeBudgetStatuses } from '../logic/budgets';
 import { activeSubscriptions, computePeriodStats } from '../logic/analytics';
 import { formatRangeLabel, fromISODate } from '../logic/dates';
 import { formatCents, formatPct } from '../logic/money';
@@ -40,6 +41,20 @@ export function Dashboard() {
   }, [txs, scope]);
 
   const catById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+
+  // Les budgets nourrissent le coach : un dépassement est le conseil le plus
+  // actionnable qu'on puisse donner.
+  const budgets = useBudgets();
+  const budgetStatuses = useMemo(
+    () =>
+      computeBudgetStatuses(
+        budgets.filter((b) => scope === 'both' || b.scope === 'both' || b.scope === scope),
+        txs,
+        categories,
+        range,
+      ),
+    [budgets, txs, categories, range, scope],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -147,6 +162,7 @@ export function Dashboard() {
         scope={scope}
         periodLabel={formatRangeLabel(range)}
         currency={currency}
+        budgetStatuses={budgetStatuses}
       />
 
       {/* Prochaines échéances */}

@@ -22,6 +22,7 @@ import { Card } from '../components/ui/Card';
 import { BadgeChip } from '../components/ui/BadgeChip';
 import { Modal } from '../components/ui/Modal';
 import { Segmented } from '../components/ui/Segmented';
+import { Switch } from '../components/ui/Switch';
 import { IconPicker } from '../components/transactions/IconPicker';
 import { getIcon } from '../components/ui/icons';
 import { ActivitiesCard } from '../components/pro/ActivitiesCard';
@@ -162,28 +163,26 @@ function ProModuleCard() {
             Sépare tes finances personnelles de ton activité indépendante, et permet de suivre
             plusieurs activités séparément. Laisse-le éteint si tu n'as qu'un salaire.
           </p>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={proEnabled}
-            aria-label="Activer le module professionnel"
-            onClick={() =>
-              update({
-                proEnabled: !proEnabled,
-                usage: !proEnabled && usage === 'perso' ? 'both' : usage,
-                defaultScope: !proEnabled ? 'both' : 'perso',
-              })
-            }
-            className={`relative mt-1 h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors ${
-              proEnabled ? 'bg-gradient-flow' : 'bg-surface-2'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-                proEnabled ? 'translate-x-5.5' : 'translate-x-0.5'
-              }`}
+          <div className="mt-0.5 flex flex-col items-center gap-1.5">
+            <Switch
+              checked={proEnabled}
+              onChange={(next) =>
+                update({
+                  proEnabled: next,
+                  usage: next && usage === 'perso' ? 'both' : usage,
+                  defaultScope: next ? 'both' : 'perso',
+                })
+              }
+              label="Activer le module professionnel"
             />
-          </button>
+            <span
+              className={`text-[10px] font-semibold uppercase tracking-wider ${
+                proEnabled ? 'text-accent-2' : 'text-ink-3'
+              }`}
+            >
+              {proEnabled ? 'Activé' : 'Éteint'}
+            </span>
+          </div>
         </div>
         {error && (
           <p role="alert" className="mt-3 rounded-2xl bg-neg/10 px-4 py-2.5 text-xs text-neg">

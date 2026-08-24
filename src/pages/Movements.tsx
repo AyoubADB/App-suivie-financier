@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PeriodSelector } from '../components/PeriodSelector';
 import { TransactionForm } from '../components/transactions/TransactionForm';
+import { TransactionDetail } from '../components/transactions/TransactionDetail';
 import { TransactionItem } from '../components/transactions/TransactionItem';
 import { TxVisual } from '../components/transactions/TxVisual';
 import { AnimatedAmount } from '../components/ui/AnimatedAmount';
@@ -54,6 +55,8 @@ export function Movements({ scope }: MovementsProps) {
   const [activityFilter, setActivityFilter] = useState<string>(ALL_ACTIVITIES);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
+  /** Transaction ouverte en aperçu, distincte du mode édition. */
+  const [viewing, setViewing] = useState<Transaction | null>(null);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [badgeFilter, setBadgeFilter] = useState<string | null>(null);
@@ -72,8 +75,7 @@ export function Movements({ scope }: MovementsProps) {
     if (!requestedId) return;
     const found = txs.find((t) => t.id === requestedId);
     if (found) {
-      setEditing(found);
-      setFormOpen(true);
+      setViewing(found);
       setParams({}, { replace: true });
     }
   }, [requestedId, txs, setParams]);
@@ -217,6 +219,20 @@ export function Movements({ scope }: MovementsProps) {
         </div>
       )}
 
+      {/* Filtre dépenses / revenus : trop utilisé pour rester dans un panneau. */}
+      <div className="flex items-center gap-2">
+        <Segmented
+          options={[
+            { value: 'all', label: 'Tout' },
+            { value: 'expense', label: 'Dépenses' },
+            { value: 'revenue', label: 'Revenus' },
+          ]}
+          value={typeFilter}
+          onChange={setTypeFilter}
+          size="sm"
+        />
+      </div>
+
       {!subsView && <PeriodSelector />}
 
       {/* Recherche + filtres */}
@@ -253,16 +269,6 @@ export function Movements({ scope }: MovementsProps) {
 
       {showFilters && (
         <Card className="flex flex-col gap-3">
-          <Segmented
-            options={[
-              { value: 'all', label: 'Tout' },
-              { value: 'expense', label: 'Dépenses' },
-              { value: 'revenue', label: 'Revenus' },
-            ]}
-            value={typeFilter}
-            onChange={setTypeFilter}
-            size="sm"
-          />
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
@@ -360,10 +366,8 @@ export function Movements({ scope }: MovementsProps) {
                       return (
                         <li key={tx.id}>
                           <button
-                            onClick={() => {
-                              setEditing(tx);
-                              setFormOpen(true);
-                            }}
+                            type="button"
+                            onClick={() => setViewing(tx)}
                             className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors ${
                               dormant ? 'bg-warn/8 ring-1 ring-warn/30' : 'hover:bg-surface-2/60'
                             }`}
@@ -461,10 +465,7 @@ export function Movements({ scope }: MovementsProps) {
                       tx={tx}
                       category={catById.get(tx.categoryId)}
                       badges={badges}
-                      onEdit={(t) => {
-                        setEditing(t);
-                        setFormOpen(true);
-                      }}
+                      onEdit={(t) => setViewing(t)}
                       onDelete={handleDelete}
                     />
                   ))}
@@ -485,6 +486,28 @@ export function Movements({ scope }: MovementsProps) {
       >
         <Plus size={26} />
       </button>
+
+      <Modal
+        open={viewing !== null}
+        onClose={() => setViewing(null)}
+        title="Détail de la transaction"
+      >
+        {viewing && (
+          <TransactionDetail
+            tx={viewing}
+            onEdit={() => {
+              setEditing(viewing);
+              setViewing(null);
+              setFormOpen(true);
+            }}
+            onDelete={() => {
+              const target = viewing;
+              setViewing(null);
+              void handleDelete(target);
+            }}
+          />
+        )}
+      </Modal>
 
       <Modal
         open={formOpen}
