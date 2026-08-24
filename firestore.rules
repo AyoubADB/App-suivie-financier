@@ -106,7 +106,8 @@ service cloud.firestore {
       return d.keys().hasOnly([
                'currency', 'theme', 'savingsGoal',
                'monthStartDay', 'defaultScope', 'privacyMode',
-               'usage', 'proEnabled', 'onboarded'
+               'usage', 'proEnabled', 'onboarded',
+               'urssafRate', 'vatThreshold', 'revenueCeiling'
              ])
              && str(d.currency, 5)
              && d.theme in ['dark', 'light']
@@ -119,17 +120,56 @@ service cloud.firestore {
              && (!('privacyMode' in d) || d.privacyMode is bool)
              && (!('usage' in d) || d.usage in ['perso', 'pro', 'both'])
              && (!('proEnabled' in d) || d.proEnabled is bool)
-             && (!('onboarded' in d) || d.onboarded is bool);
+             && (!('onboarded' in d) || d.onboarded is bool)
+             && (!('urssafRate' in d)
+                 || (d.urssafRate is number && d.urssafRate >= 0 && d.urssafRate <= 1))
+             && (!('vatThreshold' in d) || (d.vatThreshold is int && d.vatThreshold >= 0))
+             && (!('revenueCeiling' in d) || (d.revenueCeiling is int && d.revenueCeiling >= 0));
     }
 
     // ------------------------------------------------------------- budgets
 
     function validBudget(d, budgetId) {
-      return d.keys().hasOnly(['id', 'categoryId', 'scope', 'amount'])
+      return d.keys().hasOnly(['id', 'categoryId', 'scope', 'amount', 'rollover'])
              && d.id == budgetId
              && str(d.categoryId, 64)
              && d.scope in ['perso', 'pro', 'both']
-             && d.amount is int && d.amount > 0 && d.amount <= 1000000000;
+             && d.amount is int && d.amount > 0 && d.amount <= 1000000000
+             && (!('rollover' in d) || d.rollover is bool);
+    }
+
+    // --------------------------------------------------- échéances récurrentes
+
+    function validScheduled(d, entryId) {
+      return d.keys().hasAll(['id', 'label', 'type', 'scope', 'categoryId', 'amount', 'dayOfMonth', 'active'])
+             && d.keys().hasOnly([
+                  'id', 'label', 'type', 'scope', 'categoryId', 'activityId',
+                  'amount', 'dayOfMonth', 'lastGenerated', 'active'
+                ])
+             && d.id == entryId
+             && str(d.label, 140)
+             && d.type in ['expense', 'revenue']
+             && d.scope in ['perso', 'pro']
+             && str(d.categoryId, 64)
+             && optionalStr(d, 'activityId', 64)
+             && d.amount is int && d.amount > 0 && d.amount <= 1000000000
+             && d.dayOfMonth is int && d.dayOfMonth >= 1 && d.dayOfMonth <= 28
+             && optionalStr(d, 'lastGenerated', 7)
+             && d.active is bool;
+    }
+
+    // ------------------------------------------------------ objectifs d'épargne
+
+    function validGoal(d, goalId) {
+      return d.keys().hasAll(['id', 'label', 'target', 'saved', 'color', 'icon'])
+             && d.keys().hasOnly(['id', 'label', 'target', 'saved', 'deadline', 'color', 'icon'])
+             && d.id == goalId
+             && str(d.label, 80)
+             && d.target is int && d.target > 0 && d.target <= 1000000000
+             && d.saved is int && d.saved >= 0 && d.saved <= 1000000000
+             && (!('deadline' in d) || isIsoDate(d.deadline))
+             && isHexColor(d.color)
+             && str(d.icon, 48);
     }
 
     // ------------------------------------------------------------ activités
@@ -178,6 +218,18 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
                               && validActivity(request.resource.data, activityId);
+      }
+
+      match /scheduled/{entryId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+                              && validScheduled(request.resource.data, entryId);
+      }
+
+      match /goals/{goalId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+                              && validGoal(request.resource.data, goalId);
       }
 
       match /meta/settings {

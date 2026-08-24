@@ -5,6 +5,7 @@ import {
   HardDrive,
   Download,
   KeyRound,
+  Landmark,
   LogOut,
   Moon,
   Palette,
@@ -26,12 +27,15 @@ import { Switch } from '../components/ui/Switch';
 import { IconPicker } from '../components/transactions/IconPicker';
 import { getIcon } from '../components/ui/icons';
 import { ActivitiesCard } from '../components/pro/ActivitiesCard';
+import { CsvImport } from '../components/import/CsvImport';
+import { ScheduledCard } from '../components/scheduled/ScheduledCard';
 import { db } from '../data/db';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useBadges, useCategories, useRepo } from '../context/DataContext';
 import { type ExportPayload } from '../data/repository';
 import { CATEGORY_COLORS } from '../data/seed';
+import { formatCents, parseAmountToCents } from '../logic/money';
 import type { Badge, Category, Scope, TxType } from '../types';
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'MAD'];
@@ -192,7 +196,105 @@ function ProModuleCard() {
       </Card>
 
       {proEnabled && <ActivitiesCard />}
+      {proEnabled && <ProFiscalCard />}
     </>
+  );
+}
+
+/**
+ * Réglages fiscaux du module pro. Les valeurs par défaut correspondent au
+ * régime micro-entreprise en prestations de services ; elles se règlent à la
+ * main parce qu'un taux réglementaire bouge et dépend de l'activité.
+ */
+function ProFiscalCard() {
+  const { currency, urssafRate, vatThreshold, revenueCeiling, update } = useSettings();
+
+  return (
+    <Card>
+      <SectionTitle icon={Landmark}>Cotisations & seuils</SectionTitle>
+      <p className="mb-4 text-sm text-ink-2">
+        Sert à calculer la part du chiffre d'affaires à mettre de côté et à te prévenir avant les
+        seuils. Estimation indicative : ces réglages ne remplacent pas ta déclaration.
+      </p>
+
+      <label className="block">
+        <span className="flex items-center justify-between text-sm text-ink-2">
+          Taux de cotisations à provisionner
+          <span className="amount font-semibold text-ink">
+            {Math.round(urssafRate * 1000) / 10} %
+          </span>
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={50}
+          step={0.5}
+          value={Math.round(urssafRate * 1000) / 10}
+          onChange={(e) => update({ urssafRate: Number(e.target.value) / 100 })}
+          className="mt-2 w-full accent-[var(--accent)]"
+        />
+        <span className="text-[11px] text-ink-3">
+          Micro-entreprise en prestations de services : 24,6 % en 2026.
+        </span>
+      </label>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <AmountSetting
+          label="Franchise de TVA"
+          hint="Au-delà, la TVA devient facturable (37 500 € en prestations)."
+          cents={vatThreshold}
+          currency={currency}
+          onChange={(v) => update({ vatThreshold: v })}
+        />
+        <AmountSetting
+          label="Plafond du régime"
+          hint="Au-delà, changement de régime fiscal (77 700 € en prestations)."
+          cents={revenueCeiling}
+          currency={currency}
+          onChange={(v) => update({ revenueCeiling: v })}
+        />
+      </div>
+    </Card>
+  );
+}
+
+/** Champ montant en euros, converti en centimes à la validation. */
+function AmountSetting({
+  label,
+  hint,
+  cents,
+  currency,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  cents: number;
+  currency: string;
+  onChange: (cents: number) => void;
+}) {
+  const [text, setText] = useState((cents / 100).toFixed(0));
+
+  function commit() {
+    const parsed = parseAmountToCents(text);
+    if (parsed !== null && parsed > 0) onChange(parsed);
+    else setText((cents / 100).toFixed(0));
+  }
+
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-sm text-ink-2">{label}</span>
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        inputMode="decimal"
+        aria-label={label}
+        className={`amount ${inputClass}`}
+      />
+      <span className="text-[11px] text-ink-3">
+        {hint} Actuel : {formatCents(cents, currency)}.
+      </span>
+    </label>
   );
 }
 
@@ -521,6 +623,8 @@ export function Settings() {
         </p>
       </Card>
 
+      <ScheduledCard />
+
       {/* Catégories */}
       <Card>
         <div className="flex items-center justify-between">
@@ -664,6 +768,7 @@ export function Settings() {
             hidden
             onChange={(e) => void importData(e.target.files?.[0])}
           />
+          <CsvImport />
           <button
             onClick={() => void resetAll()}
             className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-2xl border border-neg/40 px-4 text-sm font-medium text-neg hover:bg-neg/10"
@@ -672,6 +777,11 @@ export function Settings() {
             Tout réinitialiser
           </button>
         </div>
+        <p className="mt-3 text-[11px] leading-relaxed text-ink-3">
+          L'export JSON reprend tout (transactions, catégories, budgets, objectifs). L'import CSV
+          sert aux relevés bancaires : les colonnes sont détectées puis corrigeables, et les lignes
+          déjà présentes ne sont pas dupliquées.
+        </p>
         {importMsg && <p className="mt-3 text-sm text-ink-2">{importMsg}</p>}
       </Card>
 

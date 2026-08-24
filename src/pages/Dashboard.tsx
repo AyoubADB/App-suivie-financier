@@ -1,7 +1,11 @@
 import { CalendarClock, ChartPie, LineChart, PiggyBank } from 'lucide-react';
 import { useMemo } from 'react';
 import { BudgetSection } from '../components/budgets/BudgetSection';
+import { ForecastCard } from '../components/forecast/ForecastCard';
+import { GoalsCard } from '../components/goals/GoalsCard';
 import { MigrationBanner } from '../components/MigrationBanner';
+import { ProSummary } from '../components/pro/ProSummary';
+import { PendingQueue } from '../components/scheduled/PendingQueue';
 import { PeriodSelector } from '../components/PeriodSelector';
 import { CategoryDonut } from '../components/charts/CategoryDonut';
 import { TrendChart } from '../components/charts/TrendChart';
@@ -15,7 +19,13 @@ import { Segmented } from '../components/ui/Segmented';
 import { usePeriod } from '../context/PeriodContext';
 import { useSettings } from '../context/SettingsContext';
 import { useScope } from '../context/ScopeContext';
-import { useBudgets, useCategories, useTransactions } from '../context/DataContext';
+import {
+  useBudgets,
+  useCategories,
+  useGoals,
+  useScheduled,
+  useTransactions,
+} from '../context/DataContext';
 import { computeBudgetStatuses } from '../logic/budgets';
 import { activeSubscriptions, computePeriodStats } from '../logic/analytics';
 import { formatRangeLabel, fromISODate } from '../logic/dates';
@@ -26,7 +36,9 @@ export function Dashboard() {
   const categories = useCategories();
   const { scope, setScope } = useScope();
   const { period, range } = usePeriod();
-  const { currency, savingsGoal, proEnabled } = useSettings();
+  const { currency, savingsGoal, proEnabled, urssafRate } = useSettings();
+  const scheduled = useScheduled();
+  const goals = useGoals();
 
   const stats = useMemo(
     () => computePeriodStats(txs, categories, scope, period, range),
@@ -59,6 +71,9 @@ export function Dashboard() {
   return (
     <div className="flex flex-col gap-4">
       <MigrationBanner />
+
+      {/* Échéances tombées depuis la dernière visite : rien n'est créé sans validation. */}
+      <PendingQueue />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {proEnabled && (
@@ -152,7 +167,14 @@ export function Dashboard() {
         </Card>
       </div>
 
+      <ForecastCard />
+
       <BudgetSection />
+
+      <GoalsCard />
+
+      {/* Synthèse de l'activité indépendante, sur la vue Pro uniquement. */}
+      {proEnabled && scope === 'pro' && <ProSummary />}
 
       {/* Coach */}
       <CoachSection
@@ -163,6 +185,7 @@ export function Dashboard() {
         periodLabel={formatRangeLabel(range)}
         currency={currency}
         budgetStatuses={budgetStatuses}
+        coachContext={{ scheduled, goals, proEnabled, urssafRate }}
       />
 
       {/* Prochaines échéances */}

@@ -7,11 +7,20 @@ import {
   setDoc,
   updateDoc,
   writeBatch,
+  deleteField,
   type CollectionReference,
   type Firestore,
 } from 'firebase/firestore';
 import { computeNextDueDate } from '../logic/dates';
-import type { Activity, Badge, Budget, Category, Transaction } from '../types';
+import type {
+  Activity,
+  Badge,
+  Budget,
+  Category,
+  SavingsGoal,
+  ScheduledEntry,
+  Transaction,
+} from '../types';
 import type { ExportPayload, FlowRepository, NewTransaction } from './repository';
 import { DEFAULT_BADGES, DEFAULT_CATEGORIES } from './seed';
 
@@ -93,6 +102,53 @@ export class FirestoreRepository implements FlowRepository {
     await updateDoc(doc(this.col<Activity>('activities'), id), { archived: true });
   }
 
+  /** Suppression définitive : les transactions liées perdent leur activité. */
+  async purgeActivity(id: string): Promise<void> {
+    await deleteDoc(doc(this.col<Activity>('activities'), id));
+    const [txs, sched] = await Promise.all([
+      getDocs(this.col<Transaction>('transactions')),
+      getDocs(this.col<ScheduledEntry>('scheduled')),
+    ]);
+    const batch = writeBatch(this.fs);
+    for (const d of txs.docs) {
+      if (d.data().activityId === id) batch.update(d.ref, { activityId: deleteField() });
+    }
+    for (const d of sched.docs) {
+      if (d.data().activityId === id) batch.update(d.ref, { activityId: deleteField() });
+    }
+    await batch.commit();
+  }
+
+  subscribeScheduled(cb: (rows: ScheduledEntry[]) => void): () => void {
+    return onSnapshot(this.col<ScheduledEntry>('scheduled'), (snap) =>
+      cb(snap.docs.map((d) => d.data())),
+    );
+  }
+
+  async setScheduled(input: Omit<ScheduledEntry, 'id'> & { id?: string }): Promise<ScheduledEntry> {
+    const entry: ScheduledEntry = { ...input, id: input.id ?? crypto.randomUUID() };
+    await setDoc(doc(this.col<ScheduledEntry>('scheduled'), entry.id), stripUndefined(entry));
+    return entry;
+  }
+
+  async deleteScheduled(id: string): Promise<void> {
+    await deleteDoc(doc(this.col<ScheduledEntry>('scheduled'), id));
+  }
+
+  subscribeGoals(cb: (rows: SavingsGoal[]) => void): () => void {
+    return onSnapshot(this.col<SavingsGoal>('goals'), (snap) => cb(snap.docs.map((d) => d.data())));
+  }
+
+  async setGoal(input: Omit<SavingsGoal, 'id'> & { id?: string }): Promise<SavingsGoal> {
+    const goal: SavingsGoal = { ...input, id: input.id ?? crypto.randomUUID() };
+    await setDoc(doc(this.col<SavingsGoal>('goals'), goal.id), stripUndefined(goal));
+    return goal;
+  }
+
+  async deleteGoal(id: string): Promise<void> {
+    await deleteDoc(doc(this.col<SavingsGoal>('goals'), id));
+  }
+
   async addTransaction(input: NewTransaction): Promise<Transaction> {
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
@@ -168,12 +224,14 @@ export class FirestoreRepository implements FlowRepository {
   }
 
   async exportAll(): Promise<ExportPayload> {
-    const [txs, cats, badges, budgets, activities] = await Promise.all([
+    const [txs, cats, badges, budgets, activities, scheduled, goals] = await Promise.all([
       getDocs(this.col<Transaction>('transactions')),
       getDocs(this.col<Category>('categories')),
       getDocs(this.col<Badge>('badges')),
       getDocs(this.col<Budget>('budgets')),
       getDocs(this.col<Activity>('activities')),
+      getDocs(this.col<ScheduledEntry>('scheduled')),
+      getDocs(this.col<SavingsGoal>('goals')),
     ]);
     return {
       version: 1,
@@ -183,6 +241,8 @@ export class FirestoreRepository implements FlowRepository {
       badges: badges.docs.map((d) => d.data()),
       budgets: budgets.docs.map((d) => d.data()),
       activities: activities.docs.map((d) => d.data()),
+      scheduled: scheduled.docs.map((d) => d.data()),
+      goals: goals.docs.map((d) => d.data()),
     };
   }
 
@@ -211,6 +271,12 @@ export class FirestoreRepository implements FlowRepository {
     for (const a of payload.activities ?? []) {
       batch.set(doc(this.col<Activity>('activities'), a.id), stripUndefined(a));
     }
+    for (const e of payload.scheduled ?? []) {
+      batch.set(doc(this.col<ScheduledEntry>('scheduled'), e.id), stripUndefined(e));
+    }
+    for (const g of payload.goals ?? []) {
+      batch.set(doc(this.col<SavingsGoal>('goals'), g.id), stripUndefined(g));
+    }
     await batch.commit();
   }
 
@@ -220,12 +286,14 @@ export class FirestoreRepository implements FlowRepository {
   }
 
   private async clearAll(): Promise<void> {
-    const [txs, cats, badges, budgets, activities] = await Promise.all([
+    const [txs, cats, badges, budgets, activities, scheduled, goals] = await Promise.all([
       getDocs(this.col('transactions')),
       getDocs(this.col('categories')),
       getDocs(this.col('badges')),
       getDocs(this.col('budgets')),
       getDocs(this.col('activities')),
+      getDocs(this.col('scheduled')),
+      getDocs(this.col('goals')),
     ]);
     const batch = writeBatch(this.fs);
     for (const d of [
@@ -234,6 +302,8 @@ export class FirestoreRepository implements FlowRepository {
       ...badges.docs,
       ...budgets.docs,
       ...activities.docs,
+      ...scheduled.docs,
+      ...goals.docs,
     ]) {
       batch.delete(d.ref);
     }

@@ -129,6 +129,12 @@ export interface UserSettings {
   proEnabled: boolean;
   /** Passe à true une fois le questionnaire d'accueil terminé. */
   onboarded: boolean;
+  /** Part des revenus pro mise de côté pour les cotisations, ratio 0..1. */
+  urssafRate: number;
+  /** Seuil de franchise de TVA en centimes (37 500 € en prestations). */
+  vatThreshold: number;
+  /** Plafond de chiffre d'affaires du régime, en centimes. */
+  revenueCeiling: number;
 }
 
 /** Plafond de dépense mensuel sur une catégorie. */
@@ -138,11 +144,68 @@ export interface Budget {
   scope: ScopeFilter;
   /** Plafond mensuel en centimes. */
   amount: number;
+  /** Reporte le reste non dépensé sur le mois suivant (méthode enveloppe). */
+  rollover: boolean;
+}
+
+/**
+ * Revenu ou dépense programmé à date fixe — un salaire, un loyer.
+ * Distinct d'un abonnement : le montant réel varie et doit être confirmé.
+ */
+export interface ScheduledEntry {
+  id: string;
+  label: string;
+  type: TxType;
+  scope: Scope;
+  categoryId: string;
+  activityId?: string;
+  /** Montant attendu, en centimes. Ajustable à la confirmation. */
+  amount: number;
+  /** Jour du mois où l'échéance tombe (1–28). */
+  dayOfMonth: number;
+  /** Dernier mois généré, au format YYYY-MM. */
+  lastGenerated?: string;
+  active: boolean;
+}
+
+/** Occurrence arrivée à échéance et pas encore confirmée. */
+export interface PendingOccurrence {
+  entry: ScheduledEntry;
+  /** Date théorique de l'échéance. */
+  dateISO: string;
+  monthKey: string;
+}
+
+/** Projet d'épargne avec montant cible et échéance optionnelle. */
+export interface SavingsGoal {
+  id: string;
+  label: string;
+  /** Montant visé, en centimes. */
+  target: number;
+  /** Montant déjà mis de côté, en centimes. */
+  saved: number;
+  /** Échéance visée, au format ISO. */
+  deadline?: string;
+  color: string;
+  icon: string;
+}
+
+/** Point de la courbe de solde prévisionnel. */
+export interface ForecastPoint {
+  dateISO: string;
+  label: string;
+  balance: number;
+  /** Libellés des mouvements attendus ce jour-là. */
+  events: string[];
 }
 
 /** État calculé d'un budget sur la période courante. */
 export interface BudgetStatus {
   budget: Budget;
+  /** Report des mois précédents, nul si l'enveloppe n'est pas reportable. */
+  carried: number;
+  /** Plafond réellement disponible : montant + report. */
+  effective: number;
   categoryLabel: string;
   categoryColor: string;
   categoryIcon: string;

@@ -14,6 +14,11 @@ const DEFAULTS: UserSettings = {
   usage: 'perso',
   proEnabled: false,
   onboarded: false,
+  // Taux de cotisations par défaut d'un micro-entrepreneur en prestations
+  // de services (BNC). Ajustable dans les réglages.
+  urssafRate: 0.246,
+  vatThreshold: 3_750_000,
+  revenueCeiling: 7_770_000,
 };
 
 /** Cache local : évite un flash de thème au chargement et sert de source en mode hors-ligne. */

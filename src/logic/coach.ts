@@ -3,13 +3,30 @@ import type {
   Category,
   Insight,
   PeriodStats,
+  SavingsGoal,
+  ScheduledEntry,
   ScopeFilter,
   Transaction,
 } from '../types';
 import { dormantSubscriptions, matchesScope, monthlyEquivalent, revenueConcentration } from './analytics';
+import { firstNegativeDay, forecastBalance } from './forecast';
+import { fromISODate } from './dates';
 import { formatCents, formatPct } from './money';
+import { urssafProvision } from './pro';
 
 const SAVINGS_TARGET = 0.2;
+
+/**
+ * Données optionnelles qui débloquent des conseils supplémentaires.
+ * Le coach reste utilisable sans : chaque heuristique se tait si sa
+ * matière première manque.
+ */
+export interface CoachContext {
+  scheduled?: ScheduledEntry[];
+  goals?: SavingsGoal[];
+  proEnabled?: boolean;
+  urssafRate?: number;
+}
 
 /**
  * Coach financier — mode A (heuristiques offline).
@@ -23,6 +40,7 @@ export function generateInsights(
   scope: ScopeFilter,
   currency = 'EUR',
   budgets: BudgetStatus[] = [],
+  context: CoachContext = {},
 ): Insight[] {
   const insights: Insight[] = [];
   const scopeLabel = scope === 'both' ? 'perso + pro' : scope;
@@ -168,9 +186,68 @@ export function generateInsights(
     });
   }
 
-  return insights
-    .sort((a, b) => (b.potentialSaving ?? 0) - (a.potentialSaving ?? 0))
-    .slice(0, 6);
+  // 11. Trésorerie prévisionnelle : le conseil le plus urgent qui soit,
+  // il court-circuite le tri par économie potentielle.
+  let pinned: Insight | null = null;
+  const scheduled = context.scheduled ?? [];
+  if (scheduled.length > 0) {
+    const negative = firstNegativeDay(forecastBalance(allTxs, scheduled, scope, 30));
+    if (negative) {
+      pinned = {
+        severity: 'warn',
+        title: 'Trésorerie dans le rouge avant la fin du mois',
+        message: `Au rythme des échéances connues, la projection passe sous zéro le ${fromISODate(
+          negative.dateISO,
+        ).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}${
+          negative.events.length > 0 ? ` (${negative.events.slice(0, 2).join(', ')})` : ''
+        }. Décale ce qui peut l'être ou renfloue avant cette date.`,
+      };
+    }
+  }
+
+  // 12. Part du chiffre d'affaires pro qui n'est pas à toi.
+  if (context.proEnabled && context.urssafRate) {
+    const { revenue, provision } = urssafProvision(allTxs, { urssafRate: context.urssafRate });
+    if (revenue > 0) {
+      insights.push({
+        severity: 'info',
+        title: `${formatCents(provision, currency)} de cotisations à provisionner`,
+        message: `Sur ${formatCents(revenue, currency)} encaissés cette année, ${formatPct(
+          context.urssafRate,
+        )} partiront en cotisations. Mets-les de côté dès l'encaissement : c'est la trésorerie qui coince, jamais le chiffre d'affaires.`,
+      });
+    }
+  }
+
+  // 13. Objectif d'épargne dont l'effort mensuel devient irréaliste.
+  const goals = context.goals ?? [];
+  const monthlyNet = stats.net;
+  for (const goal of goals) {
+    if (!goal.deadline || goal.saved >= goal.target) continue;
+    const months = monthsUntil(goal.deadline);
+    if (months === null) continue;
+    const perMonth = Math.ceil((goal.target - goal.saved) / months);
+    if (monthlyNet > 0 && perMonth > monthlyNet) {
+      insights.push({
+        severity: 'warn',
+        title: `« ${goal.label} » demande plus que ton épargne actuelle`,
+        message: `Il faudrait ${formatCents(perMonth, currency)}/mois pendant ${months} mois, alors que tu dégages ${formatCents(monthlyNet, currency)} sur la période. Recule l'échéance, baisse la cible, ou libère de la marge.`,
+      });
+      break;
+    }
+  }
+
+  const ranked = insights.sort((a, b) => (b.potentialSaving ?? 0) - (a.potentialSaving ?? 0));
+  return (pinned ? [pinned, ...ranked] : ranked).slice(0, 7);
+}
+
+/** Nombre de mois pleins restants avant une échéance ISO. */
+function monthsUntil(deadline: string): number | null {
+  const target = fromISODate(deadline);
+  const now = new Date();
+  const months =
+    (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
+  return months > 0 ? months : null;
 }
 
 /** Fenêtre d'analyse commune aux heuristiques comportementales. */

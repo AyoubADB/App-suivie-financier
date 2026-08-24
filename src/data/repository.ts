@@ -1,4 +1,12 @@
-import type { Activity, Badge, Budget, Category, Transaction } from '../types';
+import type {
+  Activity,
+  Badge,
+  Budget,
+  Category,
+  SavingsGoal,
+  ScheduledEntry,
+  Transaction,
+} from '../types';
 import { computeNextDueDate } from '../logic/dates';
 import { db } from './db';
 import { DEFAULT_BADGES, DEFAULT_CATEGORIES } from './seed';
@@ -17,6 +25,8 @@ export interface ExportPayload {
   badges: Badge[];
   budgets?: Budget[];
   activities?: Activity[];
+  scheduled?: ScheduledEntry[];
+  goals?: SavingsGoal[];
 }
 
 export type NewTransaction = Omit<Transaction, 'id' | 'createdAt' | 'updatedAt' | 'nextDueDate'>;
@@ -38,7 +48,16 @@ export interface FlowRepository {
   deleteBudget(id: string): Promise<void>;
 
   setActivity(input: Omit<Activity, 'id'> & { id?: string }): Promise<Activity>;
+  /** Archive : l'activité sort des sélecteurs mais l'historique la conserve. */
   deleteActivity(id: string): Promise<void>;
+  /** Suppression définitive : les transactions liées sont détachées. */
+  purgeActivity(id: string): Promise<void>;
+
+  setScheduled(input: Omit<ScheduledEntry, 'id'> & { id?: string }): Promise<ScheduledEntry>;
+  deleteScheduled(id: string): Promise<void>;
+
+  setGoal(input: Omit<SavingsGoal, 'id'> & { id?: string }): Promise<SavingsGoal>;
+  deleteGoal(id: string): Promise<void>;
 
   exportAll(): Promise<ExportPayload>;
   importAll(payload: ExportPayload): Promise<void>;
@@ -137,18 +156,48 @@ class DexieRepository implements FlowRepository {
     return activity;
   }
 
-  /** L'activité est archivée, jamais effacée : l'historique doit rester lisible. */
+  /** L'activité est archivée : l'historique doit rester lisible. */
   async deleteActivity(id: string): Promise<void> {
     await db.activities.update(id, { archived: true });
   }
 
+  async purgeActivity(id: string): Promise<void> {
+    await db.transaction('rw', db.activities, db.transactions, db.scheduled, async () => {
+      await db.activities.delete(id);
+      await db.transactions.where('activityId').equals(id).modify({ activityId: undefined });
+      await db.scheduled.where('activityId').equals(id).modify({ activityId: undefined });
+    });
+  }
+
+  async setScheduled(input: Omit<ScheduledEntry, 'id'> & { id?: string }): Promise<ScheduledEntry> {
+    const entry: ScheduledEntry = { ...input, id: input.id ?? uid() };
+    await db.scheduled.put(entry);
+    return entry;
+  }
+
+  async deleteScheduled(id: string): Promise<void> {
+    await db.scheduled.delete(id);
+  }
+
+  async setGoal(input: Omit<SavingsGoal, 'id'> & { id?: string }): Promise<SavingsGoal> {
+    const goal: SavingsGoal = { ...input, id: input.id ?? uid() };
+    await db.goals.put(goal);
+    return goal;
+  }
+
+  async deleteGoal(id: string): Promise<void> {
+    await db.goals.delete(id);
+  }
+
   async exportAll(): Promise<ExportPayload> {
-    const [transactions, categories, badges, budgets, activities] = await Promise.all([
+    const [transactions, categories, badges, budgets, activities, scheduled, goals] = await Promise.all([
       db.transactions.toArray(),
       db.categories.toArray(),
       db.badges.toArray(),
       db.budgets.toArray(),
       db.activities.toArray(),
+      db.scheduled.toArray(),
+      db.goals.toArray(),
     ]);
     return {
       version: 1,
@@ -158,6 +207,8 @@ class DexieRepository implements FlowRepository {
       badges,
       budgets,
       activities,
+      scheduled,
+      goals,
     };
   }
 
@@ -169,30 +220,42 @@ class DexieRepository implements FlowRepository {
           : "Le fichier ne contient pas de liste de transactions — ce n'est pas un export FLOW.",
       );
     }
-    await db.transaction('rw', db.transactions, db.categories, db.badges, db.budgets, db.activities, async () => {
+    await db.transaction(
+      'rw',
+      [db.transactions, db.categories, db.badges, db.budgets, db.activities, db.scheduled, db.goals],
+      async () => {
       await Promise.all([
         db.transactions.clear(),
         db.categories.clear(),
         db.badges.clear(),
         db.budgets.clear(),
         db.activities.clear(),
+        db.scheduled.clear(),
+        db.goals.clear(),
       ]);
       await db.categories.bulkAdd(payload.categories.length ? payload.categories : DEFAULT_CATEGORIES);
       await db.badges.bulkAdd(payload.badges.length ? payload.badges : DEFAULT_BADGES);
       await db.transactions.bulkAdd(payload.transactions);
       if (payload.budgets?.length) await db.budgets.bulkAdd(payload.budgets);
       if (payload.activities?.length) await db.activities.bulkAdd(payload.activities);
+      if (payload.scheduled?.length) await db.scheduled.bulkAdd(payload.scheduled);
+      if (payload.goals?.length) await db.goals.bulkAdd(payload.goals);
     });
   }
 
   async resetAll(): Promise<void> {
-    await db.transaction('rw', db.transactions, db.categories, db.badges, db.budgets, db.activities, async () => {
+    await db.transaction(
+      'rw',
+      [db.transactions, db.categories, db.badges, db.budgets, db.activities, db.scheduled, db.goals],
+      async () => {
       await Promise.all([
         db.transactions.clear(),
         db.categories.clear(),
         db.badges.clear(),
         db.budgets.clear(),
         db.activities.clear(),
+        db.scheduled.clear(),
+        db.goals.clear(),
       ]);
       await db.categories.bulkAdd(DEFAULT_CATEGORIES);
       await db.badges.bulkAdd(DEFAULT_BADGES);

@@ -12,6 +12,7 @@ import { getIcon } from '../ui/icons';
 import { Card } from '../ui/Card';
 import { Modal } from '../ui/Modal';
 import { Segmented } from '../ui/Segmented';
+import { Switch } from '../ui/Switch';
 
 /** Suivi des plafonds mensuels par catégorie, sur la période courante. */
 export function BudgetSection() {
@@ -98,6 +99,17 @@ export function BudgetSection() {
                         {s.budget.scope !== 'both' && (
                           <span className="ml-1.5 text-[10px] text-ink-3">{s.budget.scope}</span>
                         )}
+                        {s.budget.rollover && s.carried !== 0 && (
+                          <span
+                            title="Report des mois précédents"
+                            className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                              s.carried > 0 ? 'bg-pos/15 text-pos' : 'bg-neg/15 text-neg'
+                            }`}
+                          >
+                            {s.carried > 0 ? '+' : '−'}
+                            {formatCents(Math.abs(s.carried), currency)}
+                          </span>
+                        )}
                       </span>
                       <span
                         className={`amount shrink-0 text-xs font-semibold ${
@@ -107,7 +119,7 @@ export function BudgetSection() {
                         {privacyMode ? '•••' : formatCents(s.spent, currency)}
                         <span className="text-ink-3">
                           {' / '}
-                          {privacyMode ? '•••' : formatCents(s.budget.amount, currency)}
+                          {privacyMode ? '•••' : formatCents(s.effective, currency)}
                         </span>
                       </span>
                     </div>
@@ -128,6 +140,14 @@ export function BudgetSection() {
                       {s.level === 'over'
                         ? `Dépassé de ${formatCents(-s.remaining, currency)}`
                         : `${formatCents(s.remaining, currency)} restants · ${formatPct(s.ratio)} utilisé`}
+                      {s.budget.rollover && s.carried !== 0 && (
+                        <>
+                          {' · plafond '}
+                          {formatCents(s.budget.amount, currency)}
+                          {s.carried > 0 ? ' + ' : ' − '}
+                          {formatCents(Math.abs(s.carried), currency)} de report
+                        </>
+                      )}
                     </p>
                   </button>
                 </li>
@@ -167,13 +187,14 @@ function BudgetForm({ editing, onDone }: { editing: Budget | null; onDone: () =>
   const [amountText, setAmountText] = useState(
     editing ? (editing.amount / 100).toFixed(2).replace('.', ',') : '',
   );
+  const [rollover, setRollover] = useState(editing?.rollover ?? false);
   const [error, setError] = useState('');
 
   async function submit() {
     const amount = parseAmountToCents(amountText);
     if (amount === null || amount <= 0) return setError('Montant invalide (ex : 250).');
     setError('');
-    await repo.setBudget({ id: editing?.id, categoryId, scope, amount });
+    await repo.setBudget({ id: editing?.id, categoryId, scope, amount, rollover });
     onDone();
   }
 
@@ -226,6 +247,16 @@ function BudgetForm({ editing, onDone }: { editing: Budget | null; onDone: () =>
           className="amount min-h-[48px] w-full rounded-2xl border border-line bg-surface-2 px-4 text-base text-ink placeholder:text-ink-3 focus:border-accent focus:outline-none"
         />
       </label>
+
+      <div className="flex items-start justify-between gap-4 rounded-2xl border border-line bg-surface-2/50 p-4">
+        <div>
+          <p className="text-sm font-medium">Reporter le reste</p>
+          <p className="mt-0.5 text-xs text-ink-3">
+            Ce qui n'est pas dépensé ce mois-ci s'ajoute au plafond du mois suivant.
+          </p>
+        </div>
+        <Switch checked={rollover} onChange={setRollover} label="Reporter le reste" size="sm" />
+      </div>
 
       {error && (
         <p role="alert" className="text-xs text-neg">

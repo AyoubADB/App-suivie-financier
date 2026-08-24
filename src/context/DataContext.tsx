@@ -4,7 +4,15 @@ import { db } from '../data/db';
 import { FirestoreRepository } from '../data/firestoreRepository';
 import { repo as dexieRepo, type FlowRepository } from '../data/repository';
 import { firestore } from '../lib/firebase';
-import type { Activity, Badge, Budget, Category, Transaction } from '../types';
+import type {
+  Activity,
+  Badge,
+  Budget,
+  Category,
+  SavingsGoal,
+  ScheduledEntry,
+  Transaction,
+} from '../types';
 import { useAuth } from './AuthContext';
 
 interface DataContextValue {
@@ -13,6 +21,8 @@ interface DataContextValue {
   badges: Badge[];
   budgets: Budget[];
   activities: Activity[];
+  scheduled: ScheduledEntry[];
+  goals: SavingsGoal[];
   repo: FlowRepository;
   /** Non nul uniquement en mode connecté — utilisé par la migration locale → cloud. */
   cloudRepo: FirestoreRepository | null;
@@ -36,8 +46,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     badges: Badge[];
     budgets: Budget[];
     activities: Activity[];
+    scheduled: ScheduledEntry[];
+    goals: SavingsGoal[];
     ready: boolean;
-  }>({ transactions: [], categories: [], badges: [], budgets: [], activities: [], ready: false });
+  }>({
+    transactions: [],
+    categories: [],
+    badges: [],
+    budgets: [],
+    activities: [],
+    scheduled: [],
+    goals: [],
+    ready: false,
+  });
 
   useEffect(() => {
     if (!cloudRepo) {
@@ -47,6 +68,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         badges: [],
         budgets: [],
         activities: [],
+        scheduled: [],
+        goals: [],
         ready: false,
       });
       return;
@@ -69,6 +92,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       cloudRepo.subscribeActivities((activities) => {
         if (!cancelled) setCloudData((d) => ({ ...d, activities }));
       }),
+      cloudRepo.subscribeScheduled((scheduled) => {
+        if (!cancelled) setCloudData((d) => ({ ...d, scheduled }));
+      }),
+      cloudRepo.subscribeGoals((goals) => {
+        if (!cancelled) setCloudData((d) => ({ ...d, goals }));
+      }),
     ];
     return () => {
       cancelled = true;
@@ -81,6 +110,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const localBadges = useLiveQuery(() => db.badges.toArray(), []);
   const localBudgets = useLiveQuery(() => db.budgets.toArray(), []);
   const localActivities = useLiveQuery(() => db.activities.toArray(), []);
+  const localScheduled = useLiveQuery(() => db.scheduled.toArray(), []);
+  const localGoals = useLiveQuery(() => db.goals.toArray(), []);
 
   const value = useMemo<DataContextValue>(
     () =>
@@ -91,6 +122,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             badges: cloudData.badges,
             budgets: cloudData.budgets,
             activities: cloudData.activities,
+            scheduled: cloudData.scheduled,
+            goals: cloudData.goals,
             repo: cloudRepo,
             cloudRepo,
             ready: cloudData.ready,
@@ -101,11 +134,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
             badges: localBadges ?? [],
             budgets: localBudgets ?? [],
             activities: localActivities ?? [],
+            scheduled: localScheduled ?? [],
+            goals: localGoals ?? [],
             repo: dexieRepo,
             cloudRepo: null,
             ready: localTx !== undefined,
           },
-    [cloudRepo, cloudData, localTx, localCats, localBadges, localBudgets, localActivities],
+    [
+      cloudRepo,
+      cloudData,
+      localTx,
+      localCats,
+      localBadges,
+      localBudgets,
+      localActivities,
+      localScheduled,
+      localGoals,
+    ],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
@@ -122,6 +167,8 @@ export const useCategories = () => useData().categories;
 export const useBadges = () => useData().badges;
 export const useBudgets = () => useData().budgets;
 export const useActivities = () => useData().activities;
+export const useScheduled = () => useData().scheduled;
+export const useGoals = () => useData().goals;
 export const useRepo = () => useData().repo;
 export const useCloudRepo = () => useData().cloudRepo;
 export const useDataReady = () => useData().ready;

@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, CheckCircle2, Info, Loader2, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { askAiCoach, buildCoachSummary } from '../../logic/aiCoach';
-import { generateInsights } from '../../logic/coach';
+import { generateInsights, type CoachContext } from '../../logic/coach';
 import { formatCents } from '../../logic/money';
 import type {
   BudgetStatus,
@@ -23,6 +23,8 @@ interface CoachSectionProps {
   currency: string;
   /** État des budgets de la période — alimente un conseil supplémentaire. */
   budgetStatuses?: BudgetStatus[];
+  /** Échéances, objectifs et réglages pro — débloquent trois conseils de plus. */
+  coachContext?: CoachContext;
 }
 
 const SEVERITY_STYLE: Record<Insight['severity'], { icon: typeof Info; className: string }> = {
@@ -39,8 +41,17 @@ export function CoachSection({
   periodLabel,
   currency,
   budgetStatuses = [],
+  coachContext = {},
 }: CoachSectionProps) {
-  const insights = generateInsights(stats, allTxs, categories, scope, currency, budgetStatuses);
+  const insights = generateInsights(
+    stats,
+    allTxs,
+    categories,
+    scope,
+    currency,
+    budgetStatuses,
+    coachContext,
+  );
   const apiKey = localStorage.getItem('flow.apiKey') ?? '';
 
   const [aiText, setAiText] = useState('');

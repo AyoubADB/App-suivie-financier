@@ -14,6 +14,13 @@ Web app (PWA) de suivi des dépenses & revenus, perso et pro. Fonctionne **hors-
 - **Analytics** : solde net, taux d'épargne, deltas vs période précédente, répartition par catégorie, séries temporelles
 - **Coach financier** : conseils heuristiques chiffrés (offline) + analyse IA optionnelle via l'API Anthropic
 - **Badges** colorés et **images custom** (style Notion) sur les transactions
+- **Module professionnel optionnel** : éteint, l'app est purement perso ; allumé, il ouvre les pages Perso / Pro et les **activités** (une casquette = une activité, suivie séparément ou combinée)
+- **Échéances récurrentes** (salaire, loyer) : rien n'est créé en douce, l'app propose l'écriture le jour venu et tu ajustes le montant réel
+- **Solde prévisionnel 30 jours** avec date de passage au rouge
+- **Budgets** par catégorie avec **report d'enveloppe** (le reste du mois gonfle le plafond suivant)
+- **Objectifs d'épargne** : montant cible, échéance, effort mensuel calculé
+- **Tableau de bord pro** : provision de cotisations, seuils TVA / plafond de régime, rentabilité par activité
+- **Import de relevés CSV** : colonnes détectées puis corrigeables, catégorisation automatique, doublons ignorés
 - **PWA installable**, dark/light, mobile-first + layout desktop
 
 ## Stack
@@ -170,11 +177,11 @@ Toutes les sommes sont stockées **en centimes (entiers)** ; le formatage n'exis
 
 ## Pistes d'amélioration
 
-1. **Migration des données locales vers le cloud** à la première connexion (aujourd'hui les deux stockages sont indépendants) — proposer « importer mes données locales dans mon compte ».
-2. **Génération automatique des récurrents** : créer la transaction à l'échéance au lieu d'un simple rappel.
-3. **Budgets par catégorie** avec alerte au dépassement, et objectifs d'épargne mensuels.
-4. **Firebase Storage** pour les images custom (elles sont en base64 dans le document, ce qui pèse sur la limite de 1 Mo par document).
-5. **Import de relevés bancaires** (CSV / OFX) avec rapprochement automatique via le moteur de catégorisation existant.
-6. **Code-splitting** : le bundle dépasse 1,4 Mo, charger Recharts et Firestore en `import()` dynamique améliorerait le premier affichage.
-7. **Tests** sur `analytics.ts` et `categorizer.ts` (fonctions pures, faciles à couvrir avec Vitest).
-8. **Multi-devises** avec taux de change, et export PDF du bilan mensuel.
+1. **Firebase Storage** pour les images custom (elles sont en base64 dans le document, ce qui pèse sur la limite de 1 Mo par document).
+2. **Import OFX / QIF** en complément du CSV, et règles de catégorisation personnalisées (« si le libellé contient X, alors catégorie Y et badge Z »).
+3. **Transactions divisées** : répartir un même paiement sur plusieurs catégories.
+4. **Comptes multiples** (courant, livret, espèces) et **patrimoine net** consolidé.
+5. **Code-splitting** : le bundle dépasse 1,6 Mo, charger Recharts et Firestore en `import()` dynamique améliorerait le premier affichage.
+6. **Tests** sur `analytics.ts`, `categorizer.ts` et `csv.ts` (fonctions pures, faciles à couvrir avec Vitest).
+7. **Multi-devises** avec taux de change, et export PDF du bilan mensuel.
+8. **Notifications push** pour les échéances et les dépassements de budget.

@@ -1,6 +1,6 @@
-import { Archive, Briefcase, Pencil, Plus, RotateCcw } from 'lucide-react';
-import { useState } from 'react';
-import { useActivities, useRepo } from '../../context/DataContext';
+import { Archive, Briefcase, Pencil, Plus, RotateCcw, Trash2, TriangleAlert } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useActivities, useRepo, useTransactions } from '../../context/DataContext';
 import { CATEGORY_COLORS } from '../../data/seed';
 import type { Activity } from '../../types';
 import { IconPicker } from '../transactions/IconPicker';
@@ -14,11 +14,22 @@ import { getIcon } from '../ui/icons';
  */
 export function ActivitiesCard() {
   const activities = useActivities();
+  const txs = useTransactions();
   const repo = useRepo();
   const [editing, setEditing] = useState<Activity | 'new' | null>(null);
+  const [deleting, setDeleting] = useState<Activity | null>(null);
 
   const live = activities.filter((a) => !a.archived);
   const archived = activities.filter((a) => a.archived);
+
+  /** Nombre de mouvements rattachés à chaque activité, pour prévenir avant suppression. */
+  const counts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of txs) {
+      if (t.activityId) map.set(t.activityId, (map.get(t.activityId) ?? 0) + 1);
+    }
+    return map;
+  }, [txs]);
 
   return (
     <Card>
@@ -46,6 +57,7 @@ export function ActivitiesCard() {
         <ul className="flex flex-col gap-1">
           {live.map((a) => {
             const Icon = getIcon(a.icon);
+            const n = counts.get(a.id) ?? 0;
             return (
               <li
                 key={a.id}
@@ -57,7 +69,12 @@ export function ActivitiesCard() {
                 >
                   <Icon size={16} />
                 </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">{a.label}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{a.label}</span>
+                  <span className="text-[11px] text-ink-3">
+                    {n} mouvement{n > 1 ? 's' : ''}
+                  </span>
+                </span>
                 <button
                   type="button"
                   onClick={() => setEditing(a)}
@@ -70,9 +87,19 @@ export function ActivitiesCard() {
                   type="button"
                   onClick={() => void repo.deleteActivity(a.id)}
                   aria-label={`Archiver ${a.label}`}
+                  title="Archiver (réversible)"
                   className="cursor-pointer p-2 text-ink-3 hover:text-warn"
                 >
                   <Archive size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleting(a)}
+                  aria-label={`Supprimer ${a.label}`}
+                  title="Supprimer définitivement"
+                  className="cursor-pointer p-2 text-ink-3 hover:text-neg"
+                >
+                  <Trash2 size={15} />
                 </button>
               </li>
             );
@@ -98,6 +125,15 @@ export function ActivitiesCard() {
                   <RotateCcw size={12} />
                   Réactiver
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleting(a)}
+                  aria-label={`Supprimer ${a.label}`}
+                  className="flex cursor-pointer items-center gap-1 text-xs text-ink-3 hover:text-neg"
+                >
+                  <Trash2 size={12} />
+                  Supprimer
+                </button>
               </li>
             ))}
           </ul>
@@ -105,7 +141,8 @@ export function ActivitiesCard() {
       )}
 
       <p className="mt-3 text-[11px] text-ink-3">
-        Archiver conserve l'historique : les transactions passées gardent leur activité.
+        Archiver conserve l'historique : les transactions passées gardent leur activité. Supprimer
+        efface l'activité pour de bon — les mouvements, eux, sont conservés.
       </p>
 
       <Modal
@@ -117,7 +154,27 @@ export function ActivitiesCard() {
           <ActivityForm
             key={editing === 'new' ? 'new' : editing.id}
             editing={editing === 'new' ? null : editing}
+            onDelete={editing === 'new' ? undefined : () => setDeleting(editing)}
             onDone={() => setEditing(null)}
+          />
+        )}
+      </Modal>
+
+      <Modal
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title="Supprimer cette activité ?"
+      >
+        {deleting && (
+          <DeleteConfirm
+            activity={deleting}
+            count={counts.get(deleting.id) ?? 0}
+            onCancel={() => setDeleting(null)}
+            onConfirm={async () => {
+              await repo.purgeActivity(deleting.id);
+              setDeleting(null);
+              setEditing(null);
+            }}
           />
         )}
       </Modal>
@@ -125,7 +182,76 @@ export function ActivitiesCard() {
   );
 }
 
-function ActivityForm({ editing, onDone }: { editing: Activity | null; onDone: () => void }) {
+/**
+ * Confirmation explicite : la suppression est irréversible, mais elle ne
+ * détruit aucun mouvement — ceux-ci sont simplement détachés de l'activité.
+ */
+function DeleteConfirm({
+  activity,
+  count,
+  onCancel,
+  onConfirm,
+}: {
+  activity: Activity;
+  count: number;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-3 rounded-2xl border border-neg/30 bg-neg/8 p-4">
+        <TriangleAlert size={18} className="mt-0.5 shrink-0 text-neg" />
+        <div className="text-sm">
+          <p className="font-medium">
+            « {activity.label} » sera supprimée définitivement.
+          </p>
+          <p className="mt-1.5 text-ink-2">
+            {count > 0
+              ? `Les ${count} mouvement${count > 1 ? 's' : ''} rattaché${count > 1 ? 's' : ''} ne seront pas effacés : ils resteront dans ton historique, simplement sans activité.`
+              : 'Aucun mouvement n’est rattaché à cette activité.'}{' '}
+            Les échéances programmées de cette activité seront elles aussi détachées.
+          </p>
+          <p className="mt-1.5 text-ink-3">
+            Si tu veux seulement la masquer sans perdre le lien, préfère l’archivage.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="glass min-h-[48px] flex-1 cursor-pointer rounded-2xl text-sm font-medium"
+        >
+          Annuler
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void onConfirm().finally(() => setBusy(false));
+          }}
+          className="min-h-[48px] flex-1 cursor-pointer rounded-2xl bg-neg text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {busy ? 'Suppression…' : 'Supprimer définitivement'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ActivityForm({
+  editing,
+  onDelete,
+  onDone,
+}: {
+  editing: Activity | null;
+  onDelete?: () => void;
+  onDone: () => void;
+}) {
   const repo = useRepo();
   const [label, setLabel] = useState(editing?.label ?? '');
   const [color, setColor] = useState(editing?.color ?? CATEGORY_COLORS[0]);
@@ -194,12 +320,25 @@ function ActivityForm({ editing, onDone }: { editing: Activity | null; onDone: (
         </p>
       )}
 
-      <button
-        type="submit"
-        className="bg-gradient-flow min-h-[48px] cursor-pointer rounded-2xl font-semibold text-white"
-      >
-        {editing ? 'Enregistrer' : 'Créer l’activité'}
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          className="bg-gradient-flow min-h-[48px] flex-1 cursor-pointer rounded-2xl font-semibold text-white"
+        >
+          {editing ? 'Enregistrer' : 'Créer l’activité'}
+        </button>
+        {editing && onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label="Supprimer définitivement"
+            className="flex min-h-[48px] cursor-pointer items-center gap-1.5 rounded-2xl border border-neg/40 px-4 text-sm font-medium text-neg hover:bg-neg/10"
+          >
+            <Trash2 size={15} />
+            Supprimer
+          </button>
+        )}
+      </div>
     </form>
   );
 }
