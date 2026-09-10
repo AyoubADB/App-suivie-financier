@@ -4,6 +4,7 @@ import type {
   Badge,
   Budget,
   Category,
+  Rule,
   SavingsGoal,
   ScheduledEntry,
   Transaction,
@@ -23,6 +24,7 @@ export class FlowDB extends Dexie {
   activities!: EntityTable<Activity, 'id'>;
   scheduled!: EntityTable<ScheduledEntry, 'id'>;
   goals!: EntityTable<SavingsGoal, 'id'>;
+  rules!: EntityTable<Rule, 'id'>;
   settings!: EntityTable<SettingRow, 'key'>;
 
   constructor() {
@@ -43,6 +45,11 @@ export class FlowDB extends Dexie {
     this.version(4).stores({
       scheduled: 'id, active, activityId',
       goals: 'id',
+    });
+    this.version(5).stores({
+      rules: 'id, order, active',
+      transactions:
+        'id, date, scope, type, categoryId, isRecurring, activityId, externalId',
     });
     this.on('populate', async () => {
       await this.categories.bulkAdd(DEFAULT_CATEGORIES);

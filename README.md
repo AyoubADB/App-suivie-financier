@@ -20,7 +20,9 @@ Web app (PWA) de suivi des dépenses & revenus, perso et pro. Fonctionne **hors-
 - **Budgets** par catégorie avec **report d'enveloppe** (le reste du mois gonfle le plafond suivant)
 - **Objectifs d'épargne** : montant cible, échéance, effort mensuel calculé
 - **Tableau de bord pro** : provision de cotisations, seuils TVA / plafond de régime, rentabilité par activité
-- **Import de relevés CSV** : colonnes détectées puis corrigeables, catégorisation automatique, doublons ignorés
+- **Import de relevés CSV et OFX / QFX** : colonnes détectées puis corrigeables pour un CSV, lecture directe pour un OFX dont le FITID garantit l'absence de doublon
+- **Règles de catégorisation** : « si le libellé contient X, alors catégorie Y, badge Z, renommer en W », appliquées à la saisie, à l'import et rétroactivement à l'historique
+- **Transactions ventilées** : un même paiement réparti sur plusieurs catégories, le reliquat restant sur la catégorie principale
 - **PWA installable**, dark/light, mobile-first + layout desktop
 
 ## Stack
@@ -178,10 +180,10 @@ Toutes les sommes sont stockées **en centimes (entiers)** ; le formatage n'exis
 ## Pistes d'amélioration
 
 1. **Firebase Storage** pour les images custom (elles sont en base64 dans le document, ce qui pèse sur la limite de 1 Mo par document).
-2. **Import OFX / QIF** en complément du CSV, et règles de catégorisation personnalisées (« si le libellé contient X, alors catégorie Y et badge Z »).
-3. **Transactions divisées** : répartir un même paiement sur plusieurs catégories.
-4. **Comptes multiples** (courant, livret, espèces) et **patrimoine net** consolidé.
+2. **Import QIF** et rapprochement bancaire (pointer les mouvements déjà passés en banque).
+3. **Comptes multiples** (courant, livret, espèces) et **patrimoine net** consolidé.
+4. **Conditions multiples par règle** (aujourd'hui une règle teste un seul champ ; chaîner « libellé ET montant » demanderait un groupe de conditions).
 5. **Code-splitting** : le bundle dépasse 1,6 Mo, charger Recharts et Firestore en `import()` dynamique améliorerait le premier affichage.
-6. **Tests** sur `analytics.ts`, `categorizer.ts` et `csv.ts` (fonctions pures, faciles à couvrir avec Vitest).
+6. **Tests** sur `analytics.ts`, `categorizer.ts`, `csv.ts`, `ofx.ts` et `rules.ts` (fonctions pures, faciles à couvrir avec Vitest).
 7. **Multi-devises** avec taux de change, et export PDF du bilan mensuel.
 8. **Notifications push** pour les échéances et les dépassements de budget.

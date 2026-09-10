@@ -17,6 +17,7 @@ import type {
   Badge,
   Budget,
   Category,
+  Rule,
   SavingsGoal,
   ScheduledEntry,
   Transaction,
@@ -149,6 +150,22 @@ export class FirestoreRepository implements FlowRepository {
     await deleteDoc(doc(this.col<SavingsGoal>('goals'), id));
   }
 
+  subscribeRules(cb: (rows: Rule[]) => void): () => void {
+    return onSnapshot(this.col<Rule>('rules'), (snap) =>
+      cb(snap.docs.map((d) => d.data()).sort((a, b) => a.order - b.order)),
+    );
+  }
+
+  async setRule(input: Omit<Rule, 'id'> & { id?: string }): Promise<Rule> {
+    const rule: Rule = { ...input, id: input.id ?? crypto.randomUUID() };
+    await setDoc(doc(this.col<Rule>('rules'), rule.id), stripUndefined(rule));
+    return rule;
+  }
+
+  async deleteRule(id: string): Promise<void> {
+    await deleteDoc(doc(this.col<Rule>('rules'), id));
+  }
+
   async addTransaction(input: NewTransaction): Promise<Transaction> {
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
@@ -173,7 +190,9 @@ export class FirestoreRepository implements FlowRepository {
     else if (patch.isRecurring && patch.recurringFrequency && patch.date) {
       merged.nextDueDate = computeNextDueDate(patch.date, patch.recurringFrequency);
     }
-    await updateDoc(ref, stripUndefined(merged) as Record<string, unknown>);
+    // Une ventilation retirée, une activité détachée : le champ doit
+    // disparaître du document, pas seulement être omis de la mise à jour.
+    await updateDoc(ref, clearUndefined(merged));
   }
 
   async deleteTransaction(id: string): Promise<void> {
@@ -224,7 +243,7 @@ export class FirestoreRepository implements FlowRepository {
   }
 
   async exportAll(): Promise<ExportPayload> {
-    const [txs, cats, badges, budgets, activities, scheduled, goals] = await Promise.all([
+    const [txs, cats, badges, budgets, activities, scheduled, goals, rules] = await Promise.all([
       getDocs(this.col<Transaction>('transactions')),
       getDocs(this.col<Category>('categories')),
       getDocs(this.col<Badge>('badges')),
@@ -232,6 +251,7 @@ export class FirestoreRepository implements FlowRepository {
       getDocs(this.col<Activity>('activities')),
       getDocs(this.col<ScheduledEntry>('scheduled')),
       getDocs(this.col<SavingsGoal>('goals')),
+      getDocs(this.col<Rule>('rules')),
     ]);
     return {
       version: 1,
@@ -243,6 +263,7 @@ export class FirestoreRepository implements FlowRepository {
       activities: activities.docs.map((d) => d.data()),
       scheduled: scheduled.docs.map((d) => d.data()),
       goals: goals.docs.map((d) => d.data()),
+      rules: rules.docs.map((d) => d.data()),
     };
   }
 
@@ -277,6 +298,9 @@ export class FirestoreRepository implements FlowRepository {
     for (const g of payload.goals ?? []) {
       batch.set(doc(this.col<SavingsGoal>('goals'), g.id), stripUndefined(g));
     }
+    for (const r of payload.rules ?? []) {
+      batch.set(doc(this.col<Rule>('rules'), r.id), stripUndefined(r));
+    }
     await batch.commit();
   }
 
@@ -286,7 +310,7 @@ export class FirestoreRepository implements FlowRepository {
   }
 
   private async clearAll(): Promise<void> {
-    const [txs, cats, badges, budgets, activities, scheduled, goals] = await Promise.all([
+    const [txs, cats, badges, budgets, activities, scheduled, goals, rules] = await Promise.all([
       getDocs(this.col('transactions')),
       getDocs(this.col('categories')),
       getDocs(this.col('badges')),
@@ -294,6 +318,7 @@ export class FirestoreRepository implements FlowRepository {
       getDocs(this.col('activities')),
       getDocs(this.col('scheduled')),
       getDocs(this.col('goals')),
+      getDocs(this.col('rules')),
     ]);
     const batch = writeBatch(this.fs);
     for (const d of [
@@ -304,12 +329,24 @@ export class FirestoreRepository implements FlowRepository {
       ...activities.docs,
       ...scheduled.docs,
       ...goals.docs,
+      ...rules.docs,
     ]) {
       batch.delete(d.ref);
     }
     batch.delete(doc(this.fs, 'users', this.uid, 'meta', 'settings'));
     await batch.commit();
   }
+}
+
+/**
+ * Dans une mise à jour, `undefined` veut dire « efface ce champ ».
+ * `stripUndefined` conviendrait à une création, mais laisserait ici
+ * l'ancienne valeur en place.
+ */
+function clearUndefined(obj: object): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(obj).map(([k, v]) => [k, v === undefined ? deleteField() : v]),
+  );
 }
 
 /** Firestore rejette les valeurs `undefined`. */

@@ -27,7 +27,8 @@ import { Switch } from '../components/ui/Switch';
 import { IconPicker } from '../components/transactions/IconPicker';
 import { getIcon } from '../components/ui/icons';
 import { ActivitiesCard } from '../components/pro/ActivitiesCard';
-import { CsvImport } from '../components/import/CsvImport';
+import { StatementImport } from '../components/import/StatementImport';
+import { RulesCard } from '../components/rules/RulesCard';
 import { ScheduledCard } from '../components/scheduled/ScheduledCard';
 import { db } from '../data/db';
 import { useAuth } from '../context/AuthContext';
@@ -625,6 +626,8 @@ export function Settings() {
 
       <ScheduledCard />
 
+      <RulesCard />
+
       {/* Catégories */}
       <Card>
         <div className="flex items-center justify-between">
@@ -768,7 +771,7 @@ export function Settings() {
             hidden
             onChange={(e) => void importData(e.target.files?.[0])}
           />
-          <CsvImport />
+          <StatementImport />
           <button
             onClick={() => void resetAll()}
             className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-2xl border border-neg/40 px-4 text-sm font-medium text-neg hover:bg-neg/10"
@@ -778,9 +781,10 @@ export function Settings() {
           </button>
         </div>
         <p className="mt-3 text-[11px] leading-relaxed text-ink-3">
-          L'export JSON reprend tout (transactions, catégories, budgets, objectifs). L'import CSV
-          sert aux relevés bancaires : les colonnes sont détectées puis corrigeables, et les lignes
-          déjà présentes ne sont pas dupliquées.
+          L'export JSON reprend tout (transactions, catégories, budgets, objectifs, règles).
+          L'import de relevé accepte le CSV, dont les colonnes sont détectées puis corrigeables, et
+          l'OFX de ta banque, qui porte un identifiant par mouvement : réimporter un relevé qui
+          chevauche le précédent ne crée aucun doublon.
         </p>
         {importMsg && <p className="mt-3 text-sm text-ink-2">{importMsg}</p>}
       </Card>

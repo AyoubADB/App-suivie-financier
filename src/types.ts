@@ -13,6 +13,19 @@ export interface Category {
   keywords: string[]; // utilisé par le moteur de catégorisation
 }
 
+/**
+ * Part d'une transaction ventilée sur une autre catégorie.
+ * Un passage en caisse mélange souvent courses et produits ménagers :
+ * une seule catégorie fausse la répartition et les budgets.
+ */
+export interface TransactionSplit {
+  categoryId: string;
+  /** Montant de la part, en centimes. */
+  amount: number;
+  /** Précision facultative (« croquettes du chat »). */
+  label?: string;
+}
+
 export interface Transaction {
   id: string;
   type: TxType;
@@ -30,6 +43,16 @@ export interface Transaction {
   badges: string[]; // ids de badges
   /** Activité pro rattachée — pertinent uniquement quand scope vaut 'pro'. */
   activityId?: string;
+  /**
+   * Ventilation sur plusieurs catégories. Le reliquat non ventilé reste
+   * imputé à `categoryId`, si bien qu'une ventilation partielle est valide.
+   */
+  splits?: TransactionSplit[];
+  /**
+   * Identifiant fourni par la banque (FITID d'un relevé OFX).
+   * Permet de réimporter un relevé sans créer de doublon.
+   */
+  externalId?: string;
   note?: string;
   createdAt: string;
   updatedAt: string;
@@ -188,6 +211,54 @@ export interface SavingsGoal {
   deadline?: string;
   color: string;
   icon: string;
+}
+
+/** Ligne prête à devenir une transaction, issue d'un relevé CSV ou OFX. */
+export interface ImportDraft {
+  date: string;
+  label: string;
+  /** Toujours positif : le sens est porté par `type`. */
+  amount: number;
+  type: TxType;
+  externalId?: string;
+}
+
+/** Champ testé par une règle de catégorisation. */
+export type RuleField = 'label' | 'note' | 'amount';
+
+/** Comparateur d'une règle. Les trois derniers ne valent que pour un montant. */
+export type RuleOperator = 'contains' | 'startsWith' | 'equals' | 'gt' | 'lt';
+
+/**
+ * Règle de catégorisation personnalisée : « si le libellé contient X,
+ * alors catégorie Y, badge Z ». Elle prime sur les mots-clés des catégories,
+ * qui restent le filet de sécurité.
+ */
+export interface Rule {
+  id: string;
+  /** Nom donné par l'utilisateur, affiché quand la règle s'applique. */
+  label: string;
+  active: boolean;
+  /** Ordre d'évaluation, croissant. La première règle qui matche gagne. */
+  order: number;
+  field: RuleField;
+  operator: RuleOperator;
+  /** Texte recherché, ou montant en centimes rendu en chaîne. */
+  value: string;
+  /** Restreint la règle à un type de mouvement. */
+  type?: TxType;
+  /** Restreint la règle à une portée. */
+  scope?: Scope;
+  /** Catégorie imposée. */
+  categoryId?: string;
+  /** Badges ajoutés à ceux déjà présents. */
+  addBadges: string[];
+  /** Activité pro imposée. */
+  activityId?: string;
+  /** Remplace le libellé — utile face aux « CB CARREFOUR 4567 » des relevés. */
+  renameTo?: string;
+  /** Marque la transaction comme récurrente. */
+  markRecurring?: boolean;
 }
 
 /** Point de la courbe de solde prévisionnel. */

@@ -60,6 +60,37 @@ export function yearlyEquivalent(tx: Transaction): number {
   return monthlyEquivalent(tx) * 12;
 }
 
+/**
+ * Répartition d'une transaction par catégorie.
+ * Sans ventilation, c'est une part unique ; avec, le reliquat non ventilé
+ * reste imputé à la catégorie principale, ce qui garde la somme des parts
+ * égale au montant de la transaction.
+ */
+export function categoryParts(tx: Transaction): Array<{ categoryId: string; amount: number }> {
+  if (!tx.splits || tx.splits.length === 0) {
+    return [{ categoryId: tx.categoryId, amount: tx.amount }];
+  }
+  // Deux parts sur la même catégorie sont additionnées : les afficher
+  // séparément n'apprendrait rien et fausserait le décompte de catégories.
+  const byCategory = new Map<string, number>();
+  let allocated = 0;
+  for (const split of tx.splits) {
+    if (split.amount <= 0) continue;
+    byCategory.set(split.categoryId, (byCategory.get(split.categoryId) ?? 0) + split.amount);
+    allocated += split.amount;
+  }
+  const rest = tx.amount - allocated;
+  if (rest > 0) byCategory.set(tx.categoryId, (byCategory.get(tx.categoryId) ?? 0) + rest);
+  return [...byCategory.entries()].map(([categoryId, amount]) => ({ categoryId, amount }));
+}
+
+/** Montant d'une transaction imputé à une catégorie donnée, ventilation comprise. */
+export function amountForCategory(tx: Transaction, categoryId: string): number {
+  return categoryParts(tx)
+    .filter((p) => p.categoryId === categoryId)
+    .reduce((acc, p) => acc + p.amount, 0);
+}
+
 export function sum(txs: Transaction[]): number {
   return txs.reduce((acc, tx) => acc + tx.amount, 0);
 }
@@ -85,7 +116,11 @@ function breakdownByCategory(
 ): CategoryBreakdown[] {
   const total = sum(expenses);
   const byId = new Map<string, number>();
-  for (const tx of expenses) byId.set(tx.categoryId, (byId.get(tx.categoryId) ?? 0) + tx.amount);
+  for (const tx of expenses) {
+    for (const part of categoryParts(tx)) {
+      byId.set(part.categoryId, (byId.get(part.categoryId) ?? 0) + part.amount);
+    }
+  }
   const catById = new Map(categories.map((cat) => [cat.id, cat]));
   return [...byId.entries()]
     .map(([categoryId, catTotal]) => {
@@ -183,7 +218,11 @@ export function revenueConcentration(
   const total = sum(proRevenues);
   if (total === 0) return null;
   const byId = new Map<string, number>();
-  for (const tx of proRevenues) byId.set(tx.categoryId, (byId.get(tx.categoryId) ?? 0) + tx.amount);
+  for (const tx of proRevenues) {
+    for (const part of categoryParts(tx)) {
+      byId.set(part.categoryId, (byId.get(part.categoryId) ?? 0) + part.amount);
+    }
+  }
   const top = [...byId.entries()].sort((a, b) => b[1] - a[1])[0];
   const cat = categories.find((c) => c.id === top[0]);
   return { label: cat?.label ?? 'Autre', share: top[1] / total };

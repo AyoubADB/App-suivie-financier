@@ -9,6 +9,7 @@ import type {
   Badge,
   Budget,
   Category,
+  Rule,
   SavingsGoal,
   ScheduledEntry,
   Transaction,
@@ -23,6 +24,7 @@ interface DataContextValue {
   activities: Activity[];
   scheduled: ScheduledEntry[];
   goals: SavingsGoal[];
+  rules: Rule[];
   repo: FlowRepository;
   /** Non nul uniquement en mode connecté — utilisé par la migration locale → cloud. */
   cloudRepo: FirestoreRepository | null;
@@ -48,6 +50,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     activities: Activity[];
     scheduled: ScheduledEntry[];
     goals: SavingsGoal[];
+    rules: Rule[];
     ready: boolean;
   }>({
     transactions: [],
@@ -57,6 +60,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     activities: [],
     scheduled: [],
     goals: [],
+    rules: [],
     ready: false,
   });
 
@@ -70,6 +74,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         activities: [],
         scheduled: [],
         goals: [],
+        rules: [],
         ready: false,
       });
       return;
@@ -98,6 +103,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       cloudRepo.subscribeGoals((goals) => {
         if (!cancelled) setCloudData((d) => ({ ...d, goals }));
       }),
+      cloudRepo.subscribeRules((rules) => {
+        if (!cancelled) setCloudData((d) => ({ ...d, rules }));
+      }),
     ];
     return () => {
       cancelled = true;
@@ -112,6 +120,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const localActivities = useLiveQuery(() => db.activities.toArray(), []);
   const localScheduled = useLiveQuery(() => db.scheduled.toArray(), []);
   const localGoals = useLiveQuery(() => db.goals.toArray(), []);
+  const localRules = useLiveQuery(() => db.rules.orderBy('order').toArray(), []);
 
   const value = useMemo<DataContextValue>(
     () =>
@@ -124,6 +133,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             activities: cloudData.activities,
             scheduled: cloudData.scheduled,
             goals: cloudData.goals,
+            rules: cloudData.rules,
             repo: cloudRepo,
             cloudRepo,
             ready: cloudData.ready,
@@ -136,6 +146,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             activities: localActivities ?? [],
             scheduled: localScheduled ?? [],
             goals: localGoals ?? [],
+            rules: localRules ?? [],
             repo: dexieRepo,
             cloudRepo: null,
             ready: localTx !== undefined,
@@ -150,6 +161,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       localActivities,
       localScheduled,
       localGoals,
+      localRules,
     ],
   );
 
@@ -169,6 +181,7 @@ export const useBudgets = () => useData().budgets;
 export const useActivities = () => useData().activities;
 export const useScheduled = () => useData().scheduled;
 export const useGoals = () => useData().goals;
+export const useRules = () => useData().rules;
 export const useRepo = () => useData().repo;
 export const useCloudRepo = () => useData().cloudRepo;
 export const useDataReady = () => useData().ready;

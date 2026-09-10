@@ -1,4 +1,4 @@
-import type { TxType } from '../types';
+import type { ImportDraft } from '../types';
 
 /** Séparateurs rencontrés dans les exports bancaires français. */
 const DELIMITERS = [';', ',', '\t', '|'];
@@ -211,22 +211,14 @@ export function parseCsvAmount(raw: string): number | null {
   return negative ? -cents : cents;
 }
 
-export interface CsvDraft {
-  date: string;
-  label: string;
-  /** Toujours positif : le sens est porté par `type`. */
-  amount: number;
-  type: TxType;
-}
-
 /** Transforme les lignes exploitables en brouillons de transactions. */
 export function buildDrafts(
   rows: string[][],
   mapping: ColumnMapping,
   hasHeader: boolean,
-): { drafts: CsvDraft[]; skipped: number } {
+): { drafts: ImportDraft[]; skipped: number } {
   const body = hasHeader ? rows.slice(1) : rows;
-  const drafts: CsvDraft[] = [];
+  const drafts: ImportDraft[] = [];
   let skipped = 0;
 
   for (const row of body) {

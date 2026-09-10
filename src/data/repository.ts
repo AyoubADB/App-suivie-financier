@@ -3,6 +3,7 @@ import type {
   Badge,
   Budget,
   Category,
+  Rule,
   SavingsGoal,
   ScheduledEntry,
   Transaction,
@@ -27,6 +28,7 @@ export interface ExportPayload {
   activities?: Activity[];
   scheduled?: ScheduledEntry[];
   goals?: SavingsGoal[];
+  rules?: Rule[];
 }
 
 export type NewTransaction = Omit<Transaction, 'id' | 'createdAt' | 'updatedAt' | 'nextDueDate'>;
@@ -58,6 +60,9 @@ export interface FlowRepository {
 
   setGoal(input: Omit<SavingsGoal, 'id'> & { id?: string }): Promise<SavingsGoal>;
   deleteGoal(id: string): Promise<void>;
+
+  setRule(input: Omit<Rule, 'id'> & { id?: string }): Promise<Rule>;
+  deleteRule(id: string): Promise<void>;
 
   exportAll(): Promise<ExportPayload>;
   importAll(payload: ExportPayload): Promise<void>;
@@ -189,16 +194,28 @@ class DexieRepository implements FlowRepository {
     await db.goals.delete(id);
   }
 
+  async setRule(input: Omit<Rule, 'id'> & { id?: string }): Promise<Rule> {
+    const rule: Rule = { ...input, id: input.id ?? uid() };
+    await db.rules.put(rule);
+    return rule;
+  }
+
+  async deleteRule(id: string): Promise<void> {
+    await db.rules.delete(id);
+  }
+
   async exportAll(): Promise<ExportPayload> {
-    const [transactions, categories, badges, budgets, activities, scheduled, goals] = await Promise.all([
-      db.transactions.toArray(),
-      db.categories.toArray(),
-      db.badges.toArray(),
-      db.budgets.toArray(),
-      db.activities.toArray(),
-      db.scheduled.toArray(),
-      db.goals.toArray(),
-    ]);
+    const [transactions, categories, badges, budgets, activities, scheduled, goals, rules] =
+      await Promise.all([
+        db.transactions.toArray(),
+        db.categories.toArray(),
+        db.badges.toArray(),
+        db.budgets.toArray(),
+        db.activities.toArray(),
+        db.scheduled.toArray(),
+        db.goals.toArray(),
+        db.rules.toArray(),
+      ]);
     return {
       version: 1,
       exportedAt: new Date().toISOString(),
@@ -209,6 +226,7 @@ class DexieRepository implements FlowRepository {
       activities,
       scheduled,
       goals,
+      rules,
     };
   }
 
@@ -222,7 +240,16 @@ class DexieRepository implements FlowRepository {
     }
     await db.transaction(
       'rw',
-      [db.transactions, db.categories, db.badges, db.budgets, db.activities, db.scheduled, db.goals],
+      [
+        db.transactions,
+        db.categories,
+        db.badges,
+        db.budgets,
+        db.activities,
+        db.scheduled,
+        db.goals,
+        db.rules,
+      ],
       async () => {
       await Promise.all([
         db.transactions.clear(),
@@ -232,6 +259,7 @@ class DexieRepository implements FlowRepository {
         db.activities.clear(),
         db.scheduled.clear(),
         db.goals.clear(),
+        db.rules.clear(),
       ]);
       await db.categories.bulkAdd(payload.categories.length ? payload.categories : DEFAULT_CATEGORIES);
       await db.badges.bulkAdd(payload.badges.length ? payload.badges : DEFAULT_BADGES);
@@ -240,13 +268,23 @@ class DexieRepository implements FlowRepository {
       if (payload.activities?.length) await db.activities.bulkAdd(payload.activities);
       if (payload.scheduled?.length) await db.scheduled.bulkAdd(payload.scheduled);
       if (payload.goals?.length) await db.goals.bulkAdd(payload.goals);
+      if (payload.rules?.length) await db.rules.bulkAdd(payload.rules);
     });
   }
 
   async resetAll(): Promise<void> {
     await db.transaction(
       'rw',
-      [db.transactions, db.categories, db.badges, db.budgets, db.activities, db.scheduled, db.goals],
+      [
+        db.transactions,
+        db.categories,
+        db.badges,
+        db.budgets,
+        db.activities,
+        db.scheduled,
+        db.goals,
+        db.rules,
+      ],
       async () => {
       await Promise.all([
         db.transactions.clear(),
@@ -256,6 +294,7 @@ class DexieRepository implements FlowRepository {
         db.activities.clear(),
         db.scheduled.clear(),
         db.goals.clear(),
+        db.rules.clear(),
       ]);
       await db.categories.bulkAdd(DEFAULT_CATEGORIES);
       await db.badges.bulkAdd(DEFAULT_BADGES);

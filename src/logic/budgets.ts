@@ -1,5 +1,5 @@
 import type { Budget, BudgetStatus, Category, DateRange, Transaction } from '../types';
-import { inRange } from './analytics';
+import { amountForCategory, inRange } from './analytics';
 
 /** Nombre de mois passés pris en compte pour le report d'enveloppe. */
 const ROLLOVER_LOOKBACK = 6;
@@ -25,12 +25,8 @@ export function computeBudgetStatuses(
     .map((budget) => {
       const cat = catById.get(budget.categoryId);
       const spent = periodExpenses
-        .filter(
-          (tx) =>
-            tx.categoryId === budget.categoryId &&
-            (budget.scope === 'both' || tx.scope === budget.scope),
-        )
-        .reduce((acc, tx) => acc + tx.amount, 0);
+        .filter((tx) => budget.scope === 'both' || tx.scope === budget.scope)
+        .reduce((acc, tx) => acc + amountForCategory(tx, budget.categoryId), 0);
 
       // Report d'enveloppe : ce qui n'a pas été dépensé les mois précédents
       // vient gonfler le plafond du mois en cours.
@@ -76,11 +72,10 @@ function carriedOver(budget: Budget, txs: Transaction[], range: DateRange): numb
       .filter(
         (tx) =>
           tx.type === 'expense' &&
-          tx.categoryId === budget.categoryId &&
           (budget.scope === 'both' || tx.scope === budget.scope) &&
           inRange(tx, { from, to }),
       )
-      .reduce((acc, tx) => acc + tx.amount, 0);
+      .reduce((acc, tx) => acc + amountForCategory(tx, budget.categoryId), 0);
     carry += budget.amount - spent;
   }
   return carry;

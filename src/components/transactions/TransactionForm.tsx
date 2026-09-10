@@ -1,18 +1,32 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { ImagePlus, Sparkles, Trash2 } from 'lucide-react';
+import { ImagePlus, Sparkles, Trash2, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useActivities, useBadges, useCategories, useRepo } from '../../context/DataContext';
+import {
+  useActivities,
+  useBadges,
+  useCategories,
+  useRepo,
+  useRules,
+} from '../../context/DataContext';
 import { useSettings } from '../../context/SettingsContext';
 import { type NewTransaction } from '../../data/repository';
 import { suggestCategory } from '../../logic/categorizer';
 import { FREQUENCY_LABELS, toISODate } from '../../logic/dates';
 import { LIMITS, checkTransaction } from '../../logic/limits';
 import { parseAmountToCents } from '../../logic/money';
-import type { RecurringFrequency, Scope, Transaction, TxType } from '../../types';
+import { applyRules } from '../../logic/rules';
+import type {
+  RecurringFrequency,
+  Scope,
+  Transaction,
+  TransactionSplit,
+  TxType,
+} from '../../types';
 import { BadgeChip } from '../ui/BadgeChip';
 import { Segmented } from '../ui/Segmented';
 import { CategoryPicker } from './CategoryPicker';
 import { IconPicker } from './IconPicker';
+import { SplitEditor } from './SplitEditor';
 import { TxVisual } from './TxVisual';
 
 interface TransactionFormProps {
@@ -63,6 +77,7 @@ export function TransactionForm({
   const categories = useCategories();
   const badges = useBadges();
   const repo = useRepo();
+  const rules = useRules();
   const activities = useActivities();
   const { currency, proEnabled } = useSettings();
   const liveActivities = activities.filter((a) => !a.archived);
@@ -87,6 +102,7 @@ export function TransactionForm({
   const [iconOverride, setIconOverride] = useState<string | undefined>(editing?.iconOverride);
   const [imageUrl, setImageUrl] = useState<string | undefined>(editing?.imageUrl);
   const [note, setNote] = useState(editing?.note ?? '');
+  const [splits, setSplits] = useState<TransactionSplit[]>(editing?.splits ?? []);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [error, setError] = useState('');
   // L'utilisateur garde la main : une fois la catégorie choisie manuellement,
@@ -99,14 +115,35 @@ export function TransactionForm({
     [label, scope, type, categories],
   );
 
+  // Une règle personnalisée passe avant les mots-clés des catégories :
+  // c'est l'utilisateur qui l'a écrite, elle doit gagner.
+  const ruleHit = useMemo(() => {
+    if (label.trim().length < 2) return null;
+    const amount = parseAmountToCents(amountText) ?? 0;
+    const { effects, matched } = applyRules(rules, {
+      label,
+      amount,
+      type,
+      scope,
+      note: note.trim() || undefined,
+    });
+    return matched.length > 0 ? { effects, matched } : null;
+  }, [rules, label, amountText, type, scope, note]);
+
   useEffect(() => {
-    if (!suggestion) return;
-    if (!userTouchedCategory) setCategoryId(suggestion.category.id);
-    if (!userTouchedRecurring && suggestion.isRecurring) {
-      setIsRecurring(true);
-      if (suggestion.frequency) setFrequency(suggestion.frequency);
+    if (ruleHit?.effects.categoryId) {
+      if (!userTouchedCategory) setCategoryId(ruleHit.effects.categoryId);
+    } else if (suggestion && !userTouchedCategory) {
+      setCategoryId(suggestion.category.id);
     }
-  }, [suggestion, userTouchedCategory, userTouchedRecurring]);
+    if (!userTouchedRecurring) {
+      if (ruleHit?.effects.markRecurring) setIsRecurring(true);
+      else if (suggestion?.isRecurring) {
+        setIsRecurring(true);
+        if (suggestion.frequency) setFrequency(suggestion.frequency);
+      }
+    }
+  }, [suggestion, ruleHit, userTouchedCategory, userTouchedRecurring]);
 
   const category = categories.find((c) => c.id === categoryId);
   async function onPickImage(file: File | undefined) {
@@ -123,17 +160,26 @@ export function TransactionForm({
     }
   }
 
+  /** Badges cochés + ceux ajoutés par les règles. */
+  function mergedBadges(): string[] {
+    const out = [...selectedBadges];
+    for (const b of ruleHit?.effects.addBadges ?? []) if (!out.includes(b)) out.push(b);
+    return out;
+  }
+
   async function submit() {
     const amount = parseAmountToCents(amountText);
     if (amount === null) return setError('Montant invalide (ex : 12,99).');
     // Mêmes bornes que les règles Firestore : on échoue ici plutôt que
     // de laisser le serveur rejeter l'écriture sans explication.
+    const cleanSplits = splits.filter((s) => s.amount > 0);
     const problem = checkTransaction({
       amount,
       label: label.trim(),
       note: note.trim() || undefined,
       imageUrl,
       badges: selectedBadges,
+      splits: cleanSplits,
     });
     if (problem) return setError(problem);
     setError('');
@@ -149,9 +195,11 @@ export function TransactionForm({
       recurringFrequency: isRecurring ? frequency : undefined,
       iconOverride,
       imageUrl,
-      badges: selectedBadges,
+      badges: mergedBadges(),
       // L'activité n'a de sens qu'en pro : on ne la stocke jamais côté perso.
       activityId: scope === 'pro' && activityId ? activityId : undefined,
+      splits: cleanSplits.length > 0 ? cleanSplits : undefined,
+      externalId: editing?.externalId,
       note: note.trim() || undefined,
     };
     if (editing) await repo.updateTransaction(editing.id, payload);
@@ -228,12 +276,21 @@ export function TransactionForm({
         />
       </div>
 
-      {suggestion && !userTouchedCategory && suggestion.category.id !== 'cat-autre' && (
+      {ruleHit ? (
         <p className="flex items-center gap-1.5 text-xs text-accent-2">
-          <Sparkles size={13} />
-          Suggestion : {suggestion.category.label}
-          {suggestion.isRecurring && ' · abonnement détecté'}
+          <Wand2 size={13} />
+          Règle appliquée : {ruleHit.matched.map((r) => r.label).join(', ')}
         </p>
+      ) : (
+        suggestion &&
+        !userTouchedCategory &&
+        suggestion.category.id !== 'cat-autre' && (
+          <p className="flex items-center gap-1.5 text-xs text-accent-2">
+            <Sparkles size={13} />
+            Suggestion : {suggestion.category.label}
+            {suggestion.isRecurring && ' · abonnement détecté'}
+          </p>
+        )
       )}
 
       <AnimatePresence>
@@ -317,6 +374,18 @@ export function TransactionForm({
         }}
         scope={scope}
         type={type}
+      />
+
+      {/* Ventilation multi-catégories */}
+      <SplitEditor
+        amount={parseAmountToCents(amountText) ?? 0}
+        mainCategoryId={categoryId}
+        categories={categories}
+        scope={scope}
+        type={type}
+        currency={currency}
+        splits={splits}
+        onChange={setSplits}
       />
 
       {/* Récurrence */}

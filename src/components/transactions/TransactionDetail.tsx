@@ -3,12 +3,14 @@ import {
   CalendarDays,
   Pencil,
   RefreshCcw,
+  Split,
   Tag,
   Trash2,
   User,
 } from 'lucide-react';
 import { useActivities, useBadges, useCategories } from '../../context/DataContext';
 import { useSettings } from '../../context/SettingsContext';
+import { categoryParts } from '../../logic/analytics';
 import { FREQUENCY_LABELS, fromISODate } from '../../logic/dates';
 import { formatCents } from '../../logic/money';
 import type { Transaction } from '../../types';
@@ -37,6 +39,7 @@ export function TransactionDetail({ tx, onEdit, onDelete }: TransactionDetailPro
   const Icon = getIcon(tx.iconOverride ?? category?.icon ?? 'Tags');
   const accent = category?.color ?? '#82828e';
   const isRevenue = tx.type === 'revenue';
+  const parts = tx.splits?.length ? categoryParts(tx) : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -93,7 +96,7 @@ export function TransactionDetail({ tx, onEdit, onDelete }: TransactionDetailPro
         <Row icon={Tag} label="Catégorie">
           <span className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: accent }} />
-            {category?.label ?? 'Autre'}
+            {parts ? `${parts.length} catégories` : (category?.label ?? 'Autre')}
           </span>
         </Row>
 
@@ -102,6 +105,34 @@ export function TransactionDetail({ tx, onEdit, onDelete }: TransactionDetailPro
           {activity && ` · ${activity.label}`}
         </Row>
       </dl>
+
+      {parts && (
+        <div className="rounded-2xl border border-line bg-surface-2/50 px-4 py-3">
+          <p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-3">
+            <Split size={12} />
+            Ventilation
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {parts.map((part, i) => {
+              const cat = categories.find((c) => c.id === part.categoryId);
+              return (
+                <li key={`${part.categoryId}-${i}`} className="flex items-center gap-2 text-sm">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ background: cat?.color ?? '#82828e' }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-ink-2">
+                    {cat?.label ?? 'Autre'}
+                  </span>
+                  <span className="amount shrink-0 font-medium">
+                    {privacyMode ? '•••' : formatCents(part.amount, tx.currency)}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {txBadges.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

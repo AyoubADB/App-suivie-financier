@@ -50,7 +50,7 @@ service cloud.firestore {
                   'id', 'type', 'scope', 'amount', 'currency', 'label',
                   'categoryId', 'date', 'isRecurring', 'recurringFrequency',
                   'nextDueDate', 'iconOverride', 'imageUrl', 'badges', 'note',
-                  'activityId', 'createdAt', 'updatedAt'
+                  'activityId', 'splits', 'externalId', 'createdAt', 'updatedAt'
                 ])
              && d.id == txId
              && d.type in ['expense', 'revenue']
@@ -71,6 +71,10 @@ service cloud.firestore {
              // Image en base64 : bornée pour rester sous la limite de 1 Mio/document.
              && optionalStr(d, 'imageUrl', 400000)
              && d.badges is list && d.badges.size() <= 24
+             // Ventilation : le détail de chaque part n'est pas inspectable
+             // ici (pas de boucle dans les règles), on borne donc le nombre.
+             && (!('splits' in d) || (d.splits is list && d.splits.size() <= 20))
+             && optionalStr(d, 'externalId', 64)
              && str(d.createdAt, 40)
              && str(d.updatedAt, 40);
     }
@@ -172,6 +176,31 @@ service cloud.firestore {
              && str(d.icon, 48);
     }
 
+    // ------------------------------------------- règles de catégorisation
+
+    function validRule(d, ruleId) {
+      return d.keys().hasAll(['id', 'label', 'active', 'order', 'field', 'operator', 'value', 'addBadges'])
+             && d.keys().hasOnly([
+                  'id', 'label', 'active', 'order', 'field', 'operator', 'value',
+                  'type', 'scope', 'categoryId', 'addBadges', 'activityId',
+                  'renameTo', 'markRecurring'
+                ])
+             && d.id == ruleId
+             && str(d.label, 80)
+             && d.active is bool
+             && d.order is int && d.order >= 0 && d.order <= 10000
+             && d.field in ['label', 'note', 'amount']
+             && d.operator in ['contains', 'startsWith', 'equals', 'gt', 'lt']
+             && str(d.value, 140)
+             && (!('type' in d) || d.type in ['expense', 'revenue'])
+             && (!('scope' in d) || d.scope in ['perso', 'pro'])
+             && optionalStr(d, 'categoryId', 64)
+             && optionalStr(d, 'activityId', 64)
+             && optionalStr(d, 'renameTo', 140)
+             && d.addBadges is list && d.addBadges.size() <= 24
+             && (!('markRecurring' in d) || d.markRecurring is bool);
+    }
+
     // ------------------------------------------------------------ activités
 
     function validActivity(d, activityId) {
@@ -230,6 +259,12 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow create, update: if isOwner(userId)
                               && validGoal(request.resource.data, goalId);
+      }
+
+      match /rules/{ruleId} {
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+                              && validRule(request.resource.data, ruleId);
       }
 
       match /meta/settings {
