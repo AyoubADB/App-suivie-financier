@@ -4,15 +4,19 @@ Web app (PWA) de suivi des dépenses & revenus, perso et pro. Fonctionne **hors-
 
 ## Fonctionnalités
 
-- **3 écrans** : Dashboard, Mouvements (Perso + Pro + Abonnements réunis), Réglages
-- **Onglets** `Tout / Perso / Pro / Abonnements` — une seule barre, plus de double navigation
+- **Application installable** sur l'écran d'accueil iPhone et Android : plein écran, hors ligne, icône, raccourcis « Ajouter » et « Scanner »
+- **Pensée pour le téléphone** : barre de navigation au pouce, feuilles glissantes, zones sûres sous l'encoche, pas de zoom intempestif à la saisie
+- **Vue d'ensemble + 10 vues détaillées** accessibles par une liste déroulante : dépenses, revenus, répartition, solde prévisionnel, budgets, objectifs, abonnements, coach, activité pro, TVA
+- **Scan de facture** : photo, image ou PDF lus sur l'appareil, montant, date, enseigne et TVA extraits automatiquement
+- **Rappels quotidiens** : échéance à confirmer, budget dépassé, trésorerie qui plonge, abonnement dormant
 - **Connexion Google** (Firebase Auth) : chaque compte a son propre stockage isolé dans Firestore
 - **Recherche globale** (`⌘K` / `Ctrl+K`) sur tout l'historique + recherche locale par onglet
 - **Sélecteur de période compact** avec navigation ← → (mois précédent, etc.) : jour, semaine, mois, trimestre, année, personnalisé
 - **Catégorisation intelligente offline** : taper « Netflix » propose la catégorie Streaming, l'icône et détecte l'abonnement
 - **Abonnements** = transactions récurrentes, agrégées avec coût mensuel/annualisé, prochaines échéances, alertes « dormants »
 - **Analytics** : solde net, taux d'épargne, deltas vs période précédente, répartition par catégorie, séries temporelles
-- **Coach financier** : conseils heuristiques chiffrés (offline) + analyse IA optionnelle via l'API Anthropic
+- **Coach financier** : analyse rédigée sur l'appareil, sans clé ni connexion, complétée de conseils chiffrés ; analyse par modèle de langue en option via une clé API Anthropic
+- **TVA** : séparation HT / TVA à la saisie, synthèse collectée / déductible / à reverser, et explication des seuils
 - **Badges** colorés et **images custom** (style Notion) sur les transactions
 - **Module professionnel optionnel** : éteint, l'app est purement perso ; allumé, il ouvre les pages Perso / Pro et les **activités** (une casquette = une activité, suivie séparément ou combinée)
 - **Échéances récurrentes** (salaire, loyer) : rien n'est créé en douce, l'app propose l'écriture le jour venu et tu ajustes le montant réel
@@ -27,7 +31,21 @@ Web app (PWA) de suivi des dépenses & revenus, perso et pro. Fonctionne **hors-
 
 ## Stack
 
-React + Vite + TypeScript (strict) · Tailwind CSS v4 · Framer Motion · lucide-react · Recharts · Dexie.js (IndexedDB) · Firebase (Auth + Firestore) · vite-plugin-pwa
+React + Vite + TypeScript (strict) · Tailwind CSS v4 · Framer Motion · lucide-react · Recharts · Dexie.js (IndexedDB) · Firebase (Auth + Firestore) · vite-plugin-pwa · Tesseract.js (OCR local) · pdf.js
+
+## Reconnaissance de tickets, en local
+
+Le scan de facture n'appelle aucun service : le moteur de reconnaissance
+(WebAssembly) et le modèle de langue française sont servis par l'app
+elle-même depuis `public/ocr`, recopiés de `node_modules` par
+`npm run sync:ocr` (lancé automatiquement avant `dev` et `build`). Ces
+fichiers sont volumineux et régénérables : ils ne sont pas versionnés.
+
+Le texte reconnu est ensuite analysé par `src/logic/receipt.ts`, un jeu de
+règles écrites pour les tickets français — mots-clés de total, pièges à
+éviter (`TOTAL HT`, `TOTAL TVA`), formats de date, taux de TVA, enseignes
+courantes. Aucune image ne quitte l'appareil, et tout fonctionne hors ligne
+après le premier chargement du moteur.
 
 ## Démarrer
 
@@ -181,6 +199,7 @@ Toutes les sommes sont stockées **en centimes (entiers)** ; le formatage n'exis
 
 1. **Firebase Storage** pour les images custom (elles sont en base64 dans le document, ce qui pèse sur la limite de 1 Mo par document).
 2. **Import QIF** et rapprochement bancaire (pointer les mouvements déjà passés en banque).
+2. **Notifications planifiées** hors de l'app : impossible sans serveur de push. Aujourd'hui les rappels partent à l'ouverture de l'app ; un envoi à heure fixe demanderait Firebase Cloud Messaging et une Cloud Function.
 3. **Comptes multiples** (courant, livret, espèces) et **patrimoine net** consolidé.
 4. **Conditions multiples par règle** (aujourd'hui une règle teste un seul champ ; chaîner « libellé ET montant » demanderait un groupe de conditions).
 5. **Code-splitting** : le bundle dépasse 1,6 Mo, charger Recharts et Firestore en `import()` dynamique améliorerait le premier affichage.

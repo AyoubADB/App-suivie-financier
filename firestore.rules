@@ -50,7 +50,8 @@ service cloud.firestore {
                   'id', 'type', 'scope', 'amount', 'currency', 'label',
                   'categoryId', 'date', 'isRecurring', 'recurringFrequency',
                   'nextDueDate', 'iconOverride', 'imageUrl', 'badges', 'note',
-                  'activityId', 'splits', 'externalId', 'createdAt', 'updatedAt'
+                  'activityId', 'splits', 'externalId', 'vatRate', 'vatAmount',
+                  'receiptUrl', 'createdAt', 'updatedAt'
                 ])
              && d.id == txId
              && d.type in ['expense', 'revenue']
@@ -75,6 +76,12 @@ service cloud.firestore {
              // ici (pas de boucle dans les règles), on borne donc le nombre.
              && (!('splits' in d) || (d.splits is list && d.splits.size() <= 20))
              && optionalStr(d, 'externalId', 64)
+             // TVA : taux en pourcentage, montant en centimes compris dans le TTC.
+             && (!('vatRate' in d) || (d.vatRate is number && d.vatRate >= 0 && d.vatRate <= 100))
+             && (!('vatAmount' in d)
+                 || (d.vatAmount is int && d.vatAmount >= 0 && d.vatAmount <= d.amount))
+             // Photo du justificatif, bornée comme l'image d'illustration.
+             && optionalStr(d, 'receiptUrl', 700000)
              && str(d.createdAt, 40)
              && str(d.updatedAt, 40);
     }

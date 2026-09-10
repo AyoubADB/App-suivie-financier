@@ -18,9 +18,10 @@ import { firstNegativeDay, forecastBalance } from '../../logic/forecast';
 import { formatCents, formatCentsCompact } from '../../logic/money';
 import type { ForecastPoint } from '../../types';
 import { Card } from '../ui/Card';
+import { DetailLink } from '../ui/DetailLink';
 
 /** Projection du solde sur 30 jours à partir des échéances connues. */
-export function ForecastCard() {
+export function ForecastCard({ detailTo }: { detailTo?: string } = {}) {
   const txs = useTransactions();
   const scheduled = useScheduled();
   const { scope } = useScope();
@@ -44,11 +45,14 @@ export function ForecastCard() {
           )}
           Solde prévisionnel · 30 jours
         </h2>
-        {end && (
-          <span className={`amount text-sm font-semibold ${end.balance < 0 ? 'text-neg' : ''}`}>
-            {privacyMode ? '•••••' : formatCents(end.balance, currency)}
-          </span>
-        )}
+        <span className="flex items-center gap-1">
+          {end && (
+            <span className={`amount text-sm font-semibold ${end.balance < 0 ? 'text-neg' : ''}`}>
+              {privacyMode ? '•••••' : formatCents(end.balance, currency)}
+            </span>
+          )}
+          {detailTo && <DetailLink to={detailTo} />}
+        </span>
       </div>
 
       {!hasEvents ? (

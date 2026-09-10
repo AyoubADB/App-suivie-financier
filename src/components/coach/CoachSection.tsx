@@ -1,9 +1,11 @@
 import { motion } from 'framer-motion';
 import { AlertTriangle, CheckCircle2, Info, Loader2, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { askAiCoach, buildCoachSummary } from '../../logic/aiCoach';
 import { generateInsights, type CoachContext } from '../../logic/coach';
+import { buildLocalReport } from '../../logic/localCoach';
 import { formatCents } from '../../logic/money';
+import { useSettings } from '../../context/SettingsContext';
 import type {
   BudgetStatus,
   Category,
@@ -13,6 +15,7 @@ import type {
   Transaction,
 } from '../../types';
 import { Card } from '../ui/Card';
+import { DetailLink } from '../ui/DetailLink';
 
 interface CoachSectionProps {
   stats: PeriodStats;
@@ -25,6 +28,8 @@ interface CoachSectionProps {
   budgetStatuses?: BudgetStatus[];
   /** Échéances, objectifs et réglages pro — débloquent trois conseils de plus. */
   coachContext?: CoachContext;
+  /** Lien vers la page dédiée, affiché depuis le tableau de bord. */
+  detailTo?: string;
 }
 
 const SEVERITY_STYLE: Record<Insight['severity'], { icon: typeof Info; className: string }> = {
@@ -42,6 +47,7 @@ export function CoachSection({
   currency,
   budgetStatuses = [],
   coachContext = {},
+  detailTo,
 }: CoachSectionProps) {
   const insights = generateInsights(
     stats,
@@ -51,6 +57,27 @@ export function CoachSection({
     currency,
     budgetStatuses,
     coachContext,
+  );
+
+  // Analyse rédigée sur l'appareil : instantanée, hors ligne, sans clé.
+  const { savingsGoal } = useSettings();
+  const report = useMemo(
+    () =>
+      buildLocalReport({
+        stats,
+        allTxs,
+        categories,
+        scope,
+        periodLabel,
+        currency,
+        budgets: budgetStatuses,
+        scheduled: coachContext.scheduled,
+        goals: coachContext.goals,
+        proEnabled: coachContext.proEnabled,
+        urssafRate: coachContext.urssafRate,
+        savingsGoal,
+      }),
+    [stats, allTxs, categories, scope, periodLabel, currency, budgetStatuses, coachContext, savingsGoal],
   );
   const apiKey = localStorage.getItem('flow.apiKey') ?? '';
 
@@ -86,6 +113,8 @@ export function CoachSection({
           <Sparkles size={17} className="text-accent" />
           Coach financier
         </h2>
+        <span className="flex shrink-0 items-center gap-1">
+        {detailTo && <DetailLink to={detailTo} />}
         {apiKey && (
           <button
             onClick={() => void runAiAnalysis()}
@@ -95,6 +124,27 @@ export function CoachSection({
             {aiLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
             Analyse approfondie
           </button>
+        )}
+        </span>
+      </div>
+
+      {/* Le récit passe avant la liste : on lit d'abord ce qui s'est passé,
+          les conseils détaillés viennent ensuite. */}
+      <div className="mb-3 rounded-2xl border border-accent/20 bg-accent/6 p-4">
+        <p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+          <Sparkles size={12} />
+          Analyse locale · sur ton appareil
+        </p>
+        <p className="text-sm font-semibold leading-snug">{report.headline}</p>
+        {report.paragraphs.map((paragraph) => (
+          <p key={paragraph.slice(0, 32)} className="mt-2 text-sm leading-relaxed text-ink-2">
+            {paragraph}
+          </p>
+        ))}
+        {report.action && (
+          <p className="mt-3 rounded-xl bg-pos/10 px-3 py-2.5 text-sm font-medium leading-relaxed text-pos">
+            À faire en premier : {report.action}
+          </p>
         )}
       </div>
 
@@ -146,9 +196,10 @@ export function CoachSection({
       )}
 
       {!apiKey && (
-        <p className="mt-3 text-[11px] text-ink-3">
-          Astuce : ajoute une clé API Anthropic dans les réglages pour débloquer l'analyse IA
-          approfondie. L'app reste 100 % fonctionnelle sans.
+        <p className="mt-3 text-[11px] leading-relaxed text-ink-3">
+          Cette analyse est produite sur ton téléphone, sans clé ni connexion : chaque phrase vient
+          d'un calcul sur tes chiffres. Pour une analyse rédigée par un modèle de langue, ajoute une
+          clé API Anthropic dans les réglages — c'est facultatif.
         </p>
       )}
     </Card>

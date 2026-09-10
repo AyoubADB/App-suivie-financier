@@ -15,6 +15,7 @@ import { FREQUENCY_LABELS, toISODate } from '../../logic/dates';
 import { LIMITS, checkTransaction } from '../../logic/limits';
 import { parseAmountToCents } from '../../logic/money';
 import { applyRules } from '../../logic/rules';
+import { vatFromTtc } from '../../logic/vat';
 import type {
   RecurringFrequency,
   Scope,
@@ -27,11 +28,25 @@ import { Segmented } from '../ui/Segmented';
 import { CategoryPicker } from './CategoryPicker';
 import { IconPicker } from './IconPicker';
 import { SplitEditor } from './SplitEditor';
+import { VatField } from './VatField';
 import { TxVisual } from './TxVisual';
+
+/** Champs proposés par la lecture d'un ticket ou d'une facture. */
+export interface TransactionPrefill {
+  label?: string;
+  amount?: number;
+  date?: string;
+  categoryId?: string;
+  vatAmount?: number;
+  vatRate?: number;
+  receiptUrl?: string;
+}
 
 interface TransactionFormProps {
   /** Scope pré-sélectionné ; reste modifiable dans le formulaire. */
   defaultScope: Scope;
+  /** Valeurs issues d'un justificatif scanné, toutes modifiables. */
+  prefill?: TransactionPrefill;
   /** Activité pré-sélectionnée quand on saisit depuis une activité filtrée. */
   defaultActivityId?: string;
   /** Transaction existante → mode édition. */
@@ -70,6 +85,7 @@ async function fileToDataUrl(file: File): Promise<string> {
 
 export function TransactionForm({
   defaultScope,
+  prefill,
   defaultActivityId,
   editing,
   onSaved,
@@ -88,12 +104,15 @@ export function TransactionForm({
     editing?.activityId ?? defaultActivityId ?? '',
   );
   const [type, setType] = useState<TxType>(editing?.type ?? 'expense');
-  const [label, setLabel] = useState(editing?.label ?? '');
-  const [amountText, setAmountText] = useState(
-    editing ? (editing.amount / 100).toFixed(2).replace('.', ',') : '',
+  const [label, setLabel] = useState(editing?.label ?? prefill?.label ?? '');
+  const [amountText, setAmountText] = useState(() => {
+    const cents = editing?.amount ?? prefill?.amount;
+    return cents !== undefined ? (cents / 100).toFixed(2).replace('.', ',') : '';
+  });
+  const [date, setDate] = useState(editing?.date ?? prefill?.date ?? toISODate(new Date()));
+  const [categoryId, setCategoryId] = useState(
+    editing?.categoryId ?? prefill?.categoryId ?? 'cat-autre',
   );
-  const [date, setDate] = useState(editing?.date ?? toISODate(new Date()));
-  const [categoryId, setCategoryId] = useState(editing?.categoryId ?? 'cat-autre');
   const [isRecurring, setIsRecurring] = useState(editing?.isRecurring ?? false);
   const [frequency, setFrequency] = useState<RecurringFrequency>(
     editing?.recurringFrequency ?? 'monthly',
@@ -103,11 +122,21 @@ export function TransactionForm({
   const [imageUrl, setImageUrl] = useState<string | undefined>(editing?.imageUrl);
   const [note, setNote] = useState(editing?.note ?? '');
   const [splits, setSplits] = useState<TransactionSplit[]>(editing?.splits ?? []);
+  const [vatEnabled, setVatEnabled] = useState(
+    editing?.vatAmount !== undefined || prefill?.vatAmount !== undefined,
+  );
+  const [vatRate, setVatRate] = useState(editing?.vatRate ?? prefill?.vatRate ?? 20);
+  /** TVA saisie à la main ; null tant qu'elle se déduit du taux. */
+  const [vatOverride, setVatOverride] = useState<number | null>(prefill?.vatAmount ?? null);
+  /** Photo du justificatif, conservée avec la transaction. */
+  const [receiptUrl] = useState(editing?.receiptUrl ?? prefill?.receiptUrl);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [error, setError] = useState('');
   // L'utilisateur garde la main : une fois la catégorie choisie manuellement,
   // la suggestion ne l'écrase plus.
-  const [userTouchedCategory, setUserTouchedCategory] = useState(!!editing);
+  const [userTouchedCategory, setUserTouchedCategory] = useState(
+    !!editing || prefill?.categoryId !== undefined,
+  );
   const [userTouchedRecurring, setUserTouchedRecurring] = useState(!!editing);
 
   const suggestion = useMemo(
@@ -173,13 +202,16 @@ export function TransactionForm({
     // Mêmes bornes que les règles Firestore : on échoue ici plutôt que
     // de laisser le serveur rejeter l'écriture sans explication.
     const cleanSplits = splits.filter((s) => s.amount > 0);
+    const vatAmount = vatEnabled ? Math.min(vatOverride ?? vatFromTtc(amount, vatRate), amount) : undefined;
     const problem = checkTransaction({
       amount,
       label: label.trim(),
       note: note.trim() || undefined,
       imageUrl,
+      receiptUrl,
       badges: selectedBadges,
       splits: cleanSplits,
+      vatAmount,
     });
     if (problem) return setError(problem);
     setError('');
@@ -199,6 +231,9 @@ export function TransactionForm({
       // L'activité n'a de sens qu'en pro : on ne la stocke jamais côté perso.
       activityId: scope === 'pro' && activityId ? activityId : undefined,
       splits: cleanSplits.length > 0 ? cleanSplits : undefined,
+      vatRate: vatEnabled ? vatRate : undefined,
+      vatAmount,
+      receiptUrl,
       externalId: editing?.externalId,
       note: note.trim() || undefined,
     };
@@ -374,6 +409,19 @@ export function TransactionForm({
         }}
         scope={scope}
         type={type}
+      />
+
+      {/* TVA — surtout utile côté pro, mais un particulier peut vouloir
+          isoler la TVA d'une facture de travaux. */}
+      <VatField
+        amount={parseAmountToCents(amountText) ?? 0}
+        currency={currency}
+        enabled={vatEnabled}
+        onToggle={setVatEnabled}
+        rate={vatRate}
+        onRateChange={setVatRate}
+        override={vatOverride}
+        onOverrideChange={setVatOverride}
       />
 
       {/* Ventilation multi-catégories */}

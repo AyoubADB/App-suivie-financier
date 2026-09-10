@@ -45,10 +45,15 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             exit={{ y: 60, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 34 }}
             onClick={(e) => e.stopPropagation()}
-            className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl border border-line bg-surface p-5 shadow-2xl sm:max-w-lg sm:rounded-3xl"
+            className="max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl border border-line bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] shadow-2xl sm:max-w-lg sm:rounded-3xl sm:pb-5"
           >
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">{title}</h2>
+            {/* Poignée de préhension : signale que la feuille se ferme au doigt. */}
+            <div
+              aria-hidden="true"
+              className="mx-auto mb-3 h-1 w-10 rounded-full bg-line sm:hidden"
+            />
+            <div className="sticky -top-5 z-10 -mx-5 mb-4 flex items-center justify-between gap-3 border-b border-line bg-surface px-5 pb-3">
+              <h2 className="min-w-0 flex-1 truncate text-lg font-semibold">{title}</h2>
               <button
                 type="button"
                 onClick={onClose}

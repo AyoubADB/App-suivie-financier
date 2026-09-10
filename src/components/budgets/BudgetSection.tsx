@@ -10,12 +10,13 @@ import { parseAmountToCents } from '../../logic/money';
 import type { Budget, ScopeFilter } from '../../types';
 import { getIcon } from '../ui/icons';
 import { Card } from '../ui/Card';
+import { DetailLink } from '../ui/DetailLink';
 import { Modal } from '../ui/Modal';
 import { Segmented } from '../ui/Segmented';
 import { Switch } from '../ui/Switch';
 
 /** Suivi des plafonds mensuels par catégorie, sur la période courante. */
-export function BudgetSection() {
+export function BudgetSection({ detailTo }: { detailTo?: string } = {}) {
   const budgets = useBudgets();
   const txs = useTransactions();
   const categories = useCategories();
@@ -49,13 +50,17 @@ export function BudgetSection() {
             </span>
           )}
         </h2>
-        <button
-          onClick={() => setEditing('new')}
-          className="glass flex min-h-[36px] cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-xs font-medium"
-        >
-          <Plus size={14} />
-          Nouveau
-        </button>
+        <span className="flex shrink-0 items-center gap-1">
+          {detailTo && <DetailLink to={detailTo} />}
+          <button
+            type="button"
+            onClick={() => setEditing('new')}
+            className="glass flex min-h-[36px] cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-xs font-medium"
+          >
+            <Plus size={14} />
+            Nouveau
+          </button>
+        </span>
       </div>
 
       {statuses.length === 0 ? (

@@ -9,6 +9,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
 import { Movements } from './pages/Movements';
 import { Onboarding } from './pages/Onboarding';
+import { SectionView } from './pages/SectionView';
 import { Settings } from './pages/Settings';
 import { useSettings } from './context/SettingsContext';
 
@@ -50,6 +51,7 @@ function Routed() {
           <AppLayout>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/vue/:slug" element={<SectionView />} />
               <Route path="/reglages" element={<Settings />} />
               {proEnabled ? (
                 <>

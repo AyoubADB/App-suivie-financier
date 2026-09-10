@@ -12,6 +12,8 @@ export const LIMITS = {
   badgeLabelMax: 40,
   /** Image base64 — marge sous la limite de 1 Mio par document Firestore. */
   imageDataUrlMax: 400_000,
+  /** Photo du justificatif : plus grande que l'icône, pour rester lisible. */
+  receiptDataUrlMax: 700_000,
   badgesPerTx: 24,
   /** Parts d'une transaction ventilée. */
   splitsPerTx: 20,
@@ -24,8 +26,10 @@ export function checkTransaction(input: {
   label: string;
   note?: string;
   imageUrl?: string;
+  receiptUrl?: string;
   badges: string[];
   splits?: Array<{ categoryId: string; amount: number }>;
+  vatAmount?: number;
 }): string | null {
   if (!Number.isInteger(input.amount) || input.amount <= 0) return 'Montant invalide (ex : 12,99).';
   if (input.amount > LIMITS.amountMax) return 'Montant trop élevé (maximum 10 000 000 €).';
@@ -36,6 +40,14 @@ export function checkTransaction(input: {
     return `Note trop longue (${LIMITS.noteMax} caractères maximum).`;
   if ((input.imageUrl?.length ?? 0) > LIMITS.imageDataUrlMax)
     return 'Image trop lourde — choisis-en une plus légère.';
+  if ((input.receiptUrl?.length ?? 0) > LIMITS.receiptDataUrlMax)
+    return 'Photo du justificatif trop lourde.';
+  if (input.vatAmount !== undefined) {
+    if (!Number.isInteger(input.vatAmount) || input.vatAmount < 0)
+      return 'Montant de TVA invalide.';
+    if (input.vatAmount > input.amount)
+      return 'La TVA ne peut pas dépasser le montant TTC.';
+  }
   if (input.badges.length > LIMITS.badgesPerTx) return 'Trop de badges sur cette transaction.';
   if (input.splits && input.splits.length > 0) {
     if (input.splits.length > LIMITS.splitsPerTx)

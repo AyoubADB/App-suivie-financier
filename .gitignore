@@ -30,3 +30,6 @@ serviceAccountKey.json
 *.njsproj
 *.sln
 *.sw?
+
+# Moteur OCR recopié depuis node_modules au build
+public/ocr/

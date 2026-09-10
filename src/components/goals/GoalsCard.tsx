@@ -8,11 +8,12 @@ import { formatCents, parseAmountToCents } from '../../logic/money';
 import type { SavingsGoal } from '../../types';
 import { IconPicker } from '../transactions/IconPicker';
 import { Card } from '../ui/Card';
+import { DetailLink } from '../ui/DetailLink';
 import { Modal } from '../ui/Modal';
 import { getIcon } from '../ui/icons';
 
 /** Projets d'épargne : montant visé, progression et effort mensuel restant. */
-export function GoalsCard() {
+export function GoalsCard({ detailTo }: { detailTo?: string } = {}) {
   const goals = useGoals();
   const repo = useRepo();
   const { currency, privacyMode } = useSettings();
@@ -25,14 +26,17 @@ export function GoalsCard() {
           <PiggyBank size={17} className="text-accent-2" />
           Objectifs d'épargne
         </h2>
-        <button
-          type="button"
-          onClick={() => setEditing('new')}
-          className="glass flex min-h-[36px] cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-xs font-medium"
-        >
-          <Plus size={14} />
-          Nouveau
-        </button>
+        <span className="flex shrink-0 items-center gap-1">
+          {detailTo && <DetailLink to={detailTo} />}
+          <button
+            type="button"
+            onClick={() => setEditing('new')}
+            className="glass flex min-h-[36px] cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-xs font-medium"
+          >
+            <Plus size={14} />
+            Nouveau
+          </button>
+        </span>
       </div>
 
       {goals.length === 0 ? (

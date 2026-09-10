@@ -53,6 +53,18 @@ export interface Transaction {
    * Permet de réimporter un relevé sans créer de doublon.
    */
   externalId?: string;
+  /**
+   * Taux de TVA appliqué, en pourcentage (20, 10, 5.5, 2.1…).
+   * Présent seulement si l'utilisateur a demandé à isoler la TVA.
+   */
+  vatRate?: number;
+  /**
+   * Montant de TVA en centimes, compris dans `amount` qui reste le TTC —
+   * c'est le TTC qui quitte le compte, donc lui qui fait foi partout.
+   */
+  vatAmount?: number;
+  /** Image de la facture ou du ticket, en data-URL. */
+  receiptUrl?: string;
   note?: string;
   createdAt: string;
   updatedAt: string;

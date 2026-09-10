@@ -1,7 +1,10 @@
-import { AlarmClockOff, Plus, RefreshCcw, Search, SlidersHorizontal, Wallet, X } from 'lucide-react';
+import { AlarmClockOff, RefreshCcw, Search, SlidersHorizontal, Wallet, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PeriodSelector } from '../components/PeriodSelector';
+import { QuickAdd, type QuickAddMode } from '../components/capture/QuickAdd';
+import { ReceiptCapture, type ReceiptPrefill } from '../components/capture/ReceiptCapture';
+import { StatementImport } from '../components/import/StatementImport';
 import { TransactionForm } from '../components/transactions/TransactionForm';
 import { TransactionDetail } from '../components/transactions/TransactionDetail';
 import { TransactionItem } from '../components/transactions/TransactionItem';
@@ -54,6 +57,9 @@ export function Movements({ scope }: MovementsProps) {
   const [subsView, setSubsView] = useState(false);
   const [activityFilter, setActivityFilter] = useState<string>(ALL_ACTIVITIES);
   const [formOpen, setFormOpen] = useState(false);
+  /** Valeurs proposées par la lecture d'un ticket, avant validation. */
+  const [prefill, setPrefill] = useState<ReceiptPrefill | null>(null);
+  const [sheet, setSheet] = useState<Exclude<QuickAddMode, 'manuel'> | null>(null);
   const [editing, setEditing] = useState<Transaction | null>(null);
   /** Transaction ouverte en aperçu, distincte du mode édition. */
   const [viewing, setViewing] = useState<Transaction | null>(null);
@@ -79,6 +85,15 @@ export function Movements({ scope }: MovementsProps) {
       setParams({}, { replace: true });
     }
   }, [requestedId, txs, setParams]);
+
+  // Raccourcis de l'icône installée : appui long → « Ajouter » ou « Scanner ».
+  const shortcut = params.get('nouveau') ? 'nouveau' : params.get('scan') ? 'scan' : null;
+  useEffect(() => {
+    if (!shortcut) return;
+    if (shortcut === 'nouveau') setFormOpen(true);
+    else setSheet('scan');
+    setParams({}, { replace: true });
+  }, [shortcut, setParams]);
 
   const inScope = useMemo(
     () =>
@@ -476,16 +491,37 @@ export function Movements({ scope }: MovementsProps) {
         </>
       )}
 
-      <button
-        onClick={() => {
-          setEditing(null);
-          setFormOpen(true);
+      <QuickAdd
+        onPick={(mode) => {
+          if (mode === 'manuel') {
+            setEditing(null);
+            setPrefill(null);
+            setFormOpen(true);
+          } else {
+            setSheet(mode);
+          }
         }}
-        aria-label="Ajouter une transaction"
-        className="bg-gradient-flow fixed bottom-24 right-4 z-40 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full text-white shadow-xl shadow-accent/30 transition-transform active:scale-90 md:bottom-8 md:right-8"
-      >
-        <Plus size={26} />
-      </button>
+      />
+
+      <Modal open={sheet === 'scan'} onClose={() => setSheet(null)} title="Scanner un justificatif">
+        <ReceiptCapture
+          onUse={(next) => {
+            setSheet(null);
+            setEditing(null);
+            setPrefill(next);
+            setFormOpen(true);
+          }}
+        />
+      </Modal>
+
+      <Modal open={sheet === 'import'} onClose={() => setSheet(null)} title="Importer un relevé">
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-ink-2">
+            Les mouvements seront ajoutés à ta partie {scope === 'pro' ? 'professionnelle' : 'personnelle'}.
+          </p>
+          <StatementImport />
+        </div>
+      </Modal>
 
       <Modal
         open={viewing !== null}
@@ -511,15 +547,22 @@ export function Movements({ scope }: MovementsProps) {
 
       <Modal
         open={formOpen}
-        onClose={() => setFormOpen(false)}
+        onClose={() => {
+          setFormOpen(false);
+          setPrefill(null);
+        }}
         title={editing ? 'Modifier la transaction' : 'Nouvelle transaction'}
       >
         <TransactionForm
-          key={editing?.id ?? 'new'}
+          key={editing?.id ?? (prefill ? 'scan' : 'new')}
           defaultScope={scope}
+          prefill={prefill ?? undefined}
           defaultActivityId={activityFilter === ALL_ACTIVITIES ? undefined : activityFilter}
           editing={editing}
-          onSaved={() => setFormOpen(false)}
+          onSaved={() => {
+            setFormOpen(false);
+            setPrefill(null);
+          }}
         />
       </Modal>
     </div>

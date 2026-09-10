@@ -2,7 +2,9 @@ import {
   Briefcase,
   CalendarDays,
   Pencil,
+  Percent,
   RefreshCcw,
+  Receipt,
   Split,
   Tag,
   Trash2,
@@ -100,6 +102,21 @@ export function TransactionDetail({ tx, onEdit, onDelete }: TransactionDetailPro
           </span>
         </Row>
 
+        {tx.vatAmount !== undefined && (
+          <Row icon={Percent} label="Dont TVA">
+            {privacyMode ? '•••' : formatCents(tx.vatAmount, tx.currency)}
+            {tx.vatRate !== undefined && (
+              <span className="text-ink-3"> · {String(tx.vatRate).replace('.', ',')} %</span>
+            )}
+          </Row>
+        )}
+
+        {tx.vatAmount !== undefined && (
+          <Row icon={Percent} label="Hors taxes">
+            {privacyMode ? '•••' : formatCents(tx.amount - tx.vatAmount, tx.currency)}
+          </Row>
+        )}
+
         <Row icon={tx.scope === 'pro' ? Briefcase : User} label="Portée">
           {tx.scope === 'pro' ? 'Professionnel' : 'Personnel'}
           {activity && ` · ${activity.label}`}
@@ -131,6 +148,22 @@ export function TransactionDetail({ tx, onEdit, onDelete }: TransactionDetailPro
               );
             })}
           </ul>
+        </div>
+      )}
+
+      {tx.receiptUrl && (
+        <div className="rounded-2xl border border-line bg-surface-2/50 p-3">
+          <p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-3">
+            <Receipt size={12} />
+            Justificatif
+          </p>
+          <a href={tx.receiptUrl} target="_blank" rel="noreferrer">
+            <img
+              src={tx.receiptUrl}
+              alt="Justificatif de la transaction"
+              className="max-h-72 w-full rounded-xl object-contain"
+            />
+          </a>
         </div>
       )}
 

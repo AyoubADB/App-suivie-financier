@@ -27,7 +27,8 @@ import { Switch } from '../components/ui/Switch';
 import { IconPicker } from '../components/transactions/IconPicker';
 import { getIcon } from '../components/ui/icons';
 import { ActivitiesCard } from '../components/pro/ActivitiesCard';
-import { StatementImport } from '../components/import/StatementImport';
+import { InstallCard } from '../components/settings/InstallCard';
+import { NotificationsCard } from '../components/settings/NotificationsCard';
 import { RulesCard } from '../components/rules/RulesCard';
 import { ScheduledCard } from '../components/scheduled/ScheduledCard';
 import { db } from '../data/db';
@@ -535,6 +536,10 @@ export function Settings() {
     <div className="flex flex-col gap-4">
       <AccountCard />
 
+      <InstallCard />
+
+      <NotificationsCard />
+
       <ProModuleCard />
 
       {/* Apparence & devise */}
@@ -771,7 +776,6 @@ export function Settings() {
             hidden
             onChange={(e) => void importData(e.target.files?.[0])}
           />
-          <StatementImport />
           <button
             onClick={() => void resetAll()}
             className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-2xl border border-neg/40 px-4 text-sm font-medium text-neg hover:bg-neg/10"
@@ -781,10 +785,10 @@ export function Settings() {
           </button>
         </div>
         <p className="mt-3 text-[11px] leading-relaxed text-ink-3">
-          L'export JSON reprend tout (transactions, catégories, budgets, objectifs, règles).
-          L'import de relevé accepte le CSV, dont les colonnes sont détectées puis corrigeables, et
-          l'OFX de ta banque, qui porte un identifiant par mouvement : réimporter un relevé qui
-          chevauche le précédent ne crée aucun doublon.
+          L'export JSON reprend tout : transactions, catégories, budgets, objectifs, règles.
+          L'import d'un relevé bancaire (CSV ou OFX) et le scan d'une facture ont déménagé sur les
+          pages de mouvements : bouton <strong>+</strong> en bas à droite, c'est là que tu ajoutes
+          de toute façon.
         </p>
         {importMsg && <p className="mt-3 text-sm text-ink-2">{importMsg}</p>}
       </Card>
