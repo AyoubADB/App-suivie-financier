@@ -157,7 +157,44 @@ Ensuite, ouvre l'URL sur ton téléphone → menu du navigateur → **« Ajouter
 | **Firebase Hosting** | Recommandé — déjà dans ton projet, HTTPS, CDN, zéro config |
 | Vercel / Netlify | Très bien aussi ; pense à déclarer les variables `VITE_FIREBASE_*` dans leur interface |
 | **Vieux PC à la maison** | Possible mais déconseillé : il faut une IP fixe ou un DynDNS, ouvrir des ports sur ta box, gérer soi-même le certificat HTTPS et les mises à jour de sécurité, et laisser la machine allumée 24/7 (électricité + bruit). Pour une app qui contient tes finances, l'hébergement managé est plus sûr et plus simple. |
+| **Hébergement mutualisé** (InfinityFree, OVH, Hostinger…) | Possible : l'app est un site statique. Voir la section ci-dessous — il faut HTTPS, le `.htaccess` fourni, et autoriser le domaine dans Firebase. |
 | MySQL / phpMyAdmin | Inadapté ici : il faudrait écrire et héberger une API backend en plus. Firestore te donne la base **et** l'authentification **et** la synchronisation temps réel sans serveur à maintenir. |
+
+### Déployer sur un hébergement mutualisé (InfinityFree, OVH…)
+
+L'app est un site statique : aucun PHP, aucune base MySQL. La base de données
+et la connexion Google restent chez Firebase quel que soit l'hébergeur.
+
+```bash
+npm run build      # produit dist/ — environ 25 Mo, 40 fichiers
+```
+
+Ensuite, par FTP (FileZilla) ou le gestionnaire de fichiers de l'hébergeur :
+
+1. Copier **le contenu** de `dist/` dans `htdocs`, pas le dossier `dist`
+   lui-même. À l'arrivée, `index.html` doit se trouver directement dans
+   `htdocs`, à côté des dossiers `assets/` et `ocr/`.
+2. Vérifier que `.htaccess` est bien monté. Beaucoup de clients FTP masquent
+   les fichiers commençant par un point : il faut activer l'affichage des
+   fichiers cachés.
+3. Activer le certificat SSL dans le panneau de l'hébergeur, puis ouvrir le
+   site en `https://`.
+4. Dans la console Firebase → Authentication → Settings → **Domaines
+   autorisés**, ajouter le domaine du site. Sans cela, la connexion Google
+   renvoie `auth/unauthorized-domain`.
+
+Trois points qui font échouer un déploiement sur ce type d'hébergement :
+
+- **L'app doit être à la racine du domaine.** Les fichiers sont référencés en
+  chemins absolus (`/assets/...`). Dans un sous-dossier, il faut construire
+  avec une base : `npm run build -- --base=/mon-sous-dossier/`.
+- **HTTPS n'est pas optionnel.** Sans lui, pas d'installation sur l'écran
+  d'accueil, pas de mode hors ligne, pas de notifications, pas d'appareil
+  photo : le navigateur refuse ces fonctions sur une origine non sécurisée.
+- **Le `.htaccess` fourni est indispensable.** Il redirige vers HTTPS, renvoie
+  les adresses internes (`/vue/depenses`, `/reglages`) vers `index.html` —
+  sans quoi tout rechargement de page donne une erreur 404 — et déclare les
+  types `.wasm` et `.gz` dont dépend la lecture des tickets.
 
 ## Comment les données sont isolées
 

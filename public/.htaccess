@@ -1,0 +1,76 @@
+# ---------------------------------------------------------------------------
+# FLOW — configuration Apache (hébergement mutualisé type InfinityFree, OVH…)
+#
+# À déposer avec le reste du contenu de dist/ à la racine du site (htdocs).
+# Sur Firebase Hosting ce fichier est ignoré : les mêmes règles sont dans
+# firebase.json.
+# ---------------------------------------------------------------------------
+
+# --- HTTPS obligatoire -----------------------------------------------------
+# Sans HTTPS, le navigateur refuse le service worker (donc l'installation sur
+# l'écran d'accueil et le mode hors ligne), les notifications et l'accès à
+# l'appareil photo. En HTTP simple, l'app se réduit à un site web.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# --- Routage de l'application ----------------------------------------------
+# Les adresses comme /vue/depenses ou /reglages n'existent pas sur le disque :
+# elles sont construites par l'application. Sans cette règle, un rechargement
+# de page ou un lien partagé renverrait une erreur 404.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>
+
+# --- Types de fichiers ------------------------------------------------------
+<IfModule mod_mime.c>
+  AddType application/wasm .wasm
+  AddType application/manifest+json .webmanifest
+  AddType text/javascript .mjs
+
+  # Le modèle de reconnaissance est une archive .gz que l'application
+  # décompresse elle-même. Si Apache annonce « Content-Encoding: gzip », le
+  # navigateur la décompresse en amont et la lecture des tickets échoue.
+  RemoveEncoding .gz
+  AddType application/octet-stream .gz
+</IfModule>
+
+# --- Cache -----------------------------------------------------------------
+<IfModule mod_headers.c>
+  # Fichiers dont le nom contient une empreinte : ils ne changent jamais.
+  <FilesMatch "\.(js|mjs|css|woff2|wasm|gz)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
+  # Ces trois-là doivent être revérifiés à chaque visite, sinon une mise à
+  # jour de l'app n'arrive jamais jusqu'au téléphone.
+  <FilesMatch "^(index\.html|sw\.js|registerSW\.js|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
+# --- Sécurité ---------------------------------------------------------------
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "DENY"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  Header set Permissions-Policy "camera=(self), microphone=(), geolocation=(), interest-cohort=()"
+  Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://apis.google.com https://www.gstatic.com https://www.google.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://lh3.googleusercontent.com https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self' blob: https://tessdata.projectnaptha.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://api.anthropic.com; frame-src https://accounts.google.com https://*.firebaseapp.com https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+</IfModule>
+
+# --- Divers -----------------------------------------------------------------
+# Page d'erreur : l'application gère elle-même les adresses inconnues.
+ErrorDocument 404 /index.html
+
+# Pas de listing de répertoire si un index venait à manquer.
+# Si le site renvoie une erreur 500 après la mise en ligne, c'est presque
+# toujours cette ligne : certains hébergeurs interdisent « Options » dans un
+# .htaccess. Elle se supprime sans conséquence.
+Options -Indexes
