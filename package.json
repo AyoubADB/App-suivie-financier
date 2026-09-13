@@ -13,6 +13,7 @@
     "prebuild": "node scripts/sync-ocr-assets.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@tesseract.js-data/fra": "^1.0.0",

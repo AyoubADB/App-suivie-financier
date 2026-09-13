@@ -1,5 +1,6 @@
 import type { Category, Insight, PeriodStats, ScopeFilter, Transaction } from '../types';
 import { activeSubscriptions, monthlyEquivalent } from './analytics';
+import { anthropicClient, describeApiError } from './anthropic';
 
 /**
  * Coach IA — mode B (optionnel). Appel direct à l'API Anthropic depuis le
@@ -8,8 +9,8 @@ import { activeSubscriptions, monthlyEquivalent } from './analytics';
  * top catégories et liste d'abonnements — aucune note ni donnée inutile.
  */
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-opus-4-8';
+/** Analyse approfondie, à la demande : on prend le modèle le plus capable. */
+const MODEL = 'claude-opus-5';
 
 const SYSTEM_PROMPT = `Tu es un coach financier bienveillant et concret pour un particulier qui gère aussi une petite activité indépendante multi-casquettes. Réponds en français, ton direct, sans jargon. À partir du résumé chiffré fourni, donne 3 à 5 recommandations actionnables et chiffrées (montants en euros, pourcentages), classées par impact. Formate en liste à puces courtes. Pas d'introduction ni de conclusion.`;
 
@@ -63,67 +64,32 @@ export function buildCoachSummary(
   };
 }
 
-interface AnthropicContentBlock {
-  type: string;
-  text?: string;
-}
-
-interface AnthropicResponse {
-  content: AnthropicContentBlock[];
-  stop_reason: string;
-  error?: { message: string };
-}
-
 export async function askAiCoach(summary: CoachSummary, apiKey: string): Promise<string> {
-  let response: Response;
   try {
-    response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        // Requis pour un appel direct depuis le navigateur (CORS).
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 2048,
-        system: SYSTEM_PROMPT,
-        messages: [
-          {
-            role: 'user',
-            content: `Voici mon résumé financier :\n${JSON.stringify(summary, null, 2)}`,
-          },
-        ],
-      }),
+    const client = await anthropicClient(apiKey);
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 2048,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `Voici mon résumé financier :\n${JSON.stringify(summary, null, 2)}`,
+        },
+      ],
     });
-  } catch {
-    throw new Error('Impossible de joindre l’API Anthropic. Vérifie ta connexion internet.');
-  }
 
-  if (!response.ok) {
-    if (response.status === 401) throw new Error('Clé API invalide. Vérifie-la dans les réglages.');
-    if (response.status === 429) throw new Error('Trop de requêtes — réessaie dans une minute.');
-    let detail = '';
-    try {
-      const body = (await response.json()) as AnthropicResponse;
-      detail = body.error?.message ?? '';
-    } catch {
-      // corps non JSON — on garde le message générique
+    if (response.stop_reason === 'refusal') {
+      throw new Error('La requête a été refusée par les garde-fous du modèle. Réessaie plus tard.');
     }
-    throw new Error(`Erreur API (${response.status})${detail ? ` : ${detail}` : ''}.`);
-  }
 
-  const data = (await response.json()) as AnthropicResponse;
-  if (data.stop_reason === 'refusal') {
-    throw new Error('La requête a été refusée par les garde-fous du modèle. Réessaie plus tard.');
+    const text = response.content
+      .map((block) => (block.type === 'text' ? block.text : ''))
+      .join('\n')
+      .trim();
+    if (!text) throw new Error('Réponse vide du coach IA.');
+    return text;
+  } catch (error) {
+    throw new Error(await describeApiError(error));
   }
-  const text = data.content
-    .filter((block) => block.type === 'text' && block.text)
-    .map((block) => block.text)
-    .join('\n')
-    .trim();
-  if (!text) throw new Error('Réponse vide du coach IA.');
-  return text;
 }

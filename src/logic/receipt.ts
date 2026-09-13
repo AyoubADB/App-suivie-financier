@@ -125,13 +125,22 @@ const BRANDS: Array<{ match: string; label: string }> = [
  * En sous-chaîne, « tel » se déclencherait sur « atelier » et « action » sur
  * « transaction » : les faux positifs sont la règle, pas l'exception.
  */
-function hasWords(haystack: string, needle: string): boolean {
+export function hasWords(haystack: string, needle: string): boolean {
   const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`).test(haystack);
 }
 
 /** Les enseignes les plus spécifiques d'abord : « boulangerie » avant « boulanger ». */
 const BRANDS_BY_SPECIFICITY = [...BRANDS].sort((a, b) => b.match.length - a.match.length);
+
+/** Nom propre de l'enseigne si le texte en contient une connue. */
+export function matchBrand(text: string): string | undefined {
+  const flat = normalize(text);
+  for (const brand of BRANDS_BY_SPECIFICITY) {
+    if (hasWords(flat, brand.match)) return brand.label;
+  }
+  return undefined;
+}
 
 const MONTHS: Record<string, number> = {
   janvier: 1, janv: 1, fevrier: 2, fevr: 2, mars: 3, avril: 4, avr: 4, mai: 5,
@@ -140,7 +149,7 @@ const MONTHS: Record<string, number> = {
 };
 
 /** Tous les montants d'une ligne, en centimes. */
-function amountsIn(line: string): number[] {
+export function amountsIn(line: string): number[] {
   const out: number[] = [];
   // 1 234,56 · 12.34 · 7,65 € — au moins deux décimales pour éviter de
   // confondre un montant avec une quantité ou une référence produit.
@@ -218,10 +227,8 @@ function extractVat(lines: string[]): { amount?: number; rate?: number } {
 
 /** Enseigne, depuis les premières lignes ou une marque connue. */
 function extractMerchant(lines: string[], fullText: string): string | undefined {
-  const flat = normalize(fullText);
-  for (const brand of BRANDS_BY_SPECIFICITY) {
-    if (hasWords(flat, brand.match)) return brand.label;
-  }
+  const brand = matchBrand(fullText);
+  if (brand) return brand;
 
   const noise = [
     'ticket', 'facture', 'recu', 'siret', 'siren', 'tva intra', 'tel', 'merci',
@@ -240,7 +247,7 @@ function extractMerchant(lines: string[], fullText: string): string | undefined 
   return undefined;
 }
 
-function titleCase(s: string): string {
+export function titleCase(s: string): string {
   return s
     .toLocaleLowerCase('fr-FR')
     .split(' ')

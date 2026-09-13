@@ -1,4 +1,4 @@
-import { AlarmClockOff, RefreshCcw, Search, SlidersHorizontal, Wallet, X } from 'lucide-react';
+import { AlarmClockOff, Check, RefreshCcw, Search, SlidersHorizontal, Wallet, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PeriodSelector } from '../components/PeriodSelector';
@@ -60,6 +60,8 @@ export function Movements({ scope }: MovementsProps) {
   /** Valeurs proposées par la lecture d'un ticket, avant validation. */
   const [prefill, setPrefill] = useState<ReceiptPrefill | null>(null);
   const [sheet, setSheet] = useState<Exclude<QuickAddMode, 'manuel'> | null>(null);
+  /** Confirmation après un import groupé, effacée au geste suivant. */
+  const [imported, setImported] = useState('');
   const [editing, setEditing] = useState<Transaction | null>(null);
   /** Transaction ouverte en aperçu, distincte du mode édition. */
   const [viewing, setViewing] = useState<Transaction | null>(null);
@@ -175,6 +177,21 @@ export function Movements({ scope }: MovementsProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      {imported && (
+        <div className="flex items-center gap-3 rounded-2xl border border-pos/30 bg-pos/10 px-4 py-3">
+          <Check size={17} className="shrink-0 text-pos" />
+          <p className="min-w-0 flex-1 text-sm text-pos">{imported}</p>
+          <button
+            type="button"
+            onClick={() => setImported('')}
+            aria-label="Fermer"
+            className="shrink-0 cursor-pointer p-1 text-pos/70 hover:text-pos"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Vue : mouvements ou abonnements. Le scope vient de la route. */}
       <div className="scrollbar-none -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
         {[
@@ -503,13 +520,20 @@ export function Movements({ scope }: MovementsProps) {
         }}
       />
 
-      <Modal open={sheet === 'scan'} onClose={() => setSheet(null)} title="Scanner un justificatif">
+      <Modal open={sheet === 'scan'} onClose={() => setSheet(null)} title="Scanner un ticket ou un relevé">
         <ReceiptCapture
+          scope={scope}
           onUse={(next) => {
             setSheet(null);
             setEditing(null);
             setPrefill(next);
             setFormOpen(true);
+          }}
+          onImported={(added) => {
+            setSheet(null);
+            setImported(
+              `${added} mouvement${added > 1 ? 's' : ''} ajouté${added > 1 ? 's' : ''} depuis la capture.`,
+            );
           }}
         />
       </Modal>

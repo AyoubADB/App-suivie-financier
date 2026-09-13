@@ -9,7 +9,10 @@ import { ocrSupported, recognizeImage, releaseOcr, type OcrProgress } from '../.
 import { readPdf } from '../../logic/pdf';
 import { extractReceipt, type ReceiptFields } from '../../logic/receipt';
 import { applyRules } from '../../logic/rules';
+import { extractStatement, looksLikeStatement, type StatementParse } from '../../logic/statementShot';
+import type { Scope } from '../../types';
 import { getIcon } from '../ui/icons';
+import { StatementReview } from './StatementReview';
 
 /** Ce que la capture transmet au formulaire de transaction. */
 export interface ReceiptPrefill {
@@ -24,6 +27,10 @@ export interface ReceiptPrefill {
 
 interface ReceiptCaptureProps {
   onUse: (prefill: ReceiptPrefill) => void;
+  /** Portée des mouvements créés depuis une capture de compte. */
+  scope: Scope;
+  /** Appelé après un import groupé, avec le nombre d'écritures créées. */
+  onImported: (added: number) => void;
 }
 
 /**
@@ -33,7 +40,7 @@ interface ReceiptCaptureProps {
  * date et de la TVA. Aucune image n'est envoyée nulle part, et l'app reste
  * utilisable hors ligne une fois le moteur téléchargé.
  */
-export function ReceiptCapture({ onUse }: ReceiptCaptureProps) {
+export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps) {
   const categories = useCategories();
   const rules = useRules();
   const { currency } = useSettings();
@@ -46,6 +53,10 @@ export function ReceiptCapture({ onUse }: ReceiptCaptureProps) {
   /** Version allégée conservée avec la transaction, distincte de celle lue. */
   const [receipt, setReceipt] = useState<string | null>(null);
   const [fields, setFields] = useState<ReceiptFields | null>(null);
+  /** Opérations trouvées quand l'image est une capture de compte. */
+  const [statement, setStatement] = useState<StatementParse | null>(null);
+  const [ocrText, setOcrText] = useState('');
+  const [mode, setMode] = useState<'ticket' | 'releve'>('ticket');
   const [error, setError] = useState('');
 
   // Le moteur occupe plusieurs dizaines de mégaoctets de mémoire : on le
@@ -56,6 +67,7 @@ export function ReceiptCapture({ onUse }: ReceiptCaptureProps) {
     if (!file) return;
     setError('');
     setFields(null);
+    setStatement(null);
     setBusy(true);
     setProgress({ stage: 'chargement', ratio: 0 });
 
@@ -80,10 +92,17 @@ export function ReceiptCapture({ onUse }: ReceiptCaptureProps) {
       }
 
       if (!text.trim()) {
-        setError("Aucun texte lisible. Reprends la photo à plat, bien éclairée et sans flou.");
+        setError('Aucun texte lisible. Reprends la photo à plat, bien éclairée et sans flou.');
         return;
       }
+
+      // Un ticket de caisse et une capture de compte se lisent différemment.
+      // On analyse les deux, et c'est le contenu qui décide de la vue.
+      const parsed = extractStatement(text);
+      setOcrText(text);
+      setStatement(parsed);
       setFields(extractReceipt(text));
+      setMode(looksLikeStatement(parsed, text) ? 'releve' : 'ticket');
     } catch (err) {
       const message = err instanceof Error ? err.message : '';
       const engineFailed = /worker|importscripts|network|fetch|wasm/i.test(message);
@@ -163,8 +182,11 @@ export function ReceiptCapture({ onUse }: ReceiptCaptureProps) {
           </div>
 
           <p className="text-xs leading-relaxed text-ink-3">
-            Le ticket est lu sur ton téléphone, rien n'est envoyé sur Internet. La première lecture
-            télécharge le moteur (quelques mégaoctets), ensuite tout fonctionne hors ligne.
+            Fonctionne avec un ticket de caisse, une facture, ou une{' '}
+            <strong className="font-medium text-ink-2">capture d'écran de ton compte bancaire</strong> —
+            dans ce cas toutes les opérations visibles sont extraites d'un coup. Tout est lu sur ton
+            téléphone, rien n'est envoyé sur Internet. La première lecture télécharge le moteur
+            (quelques mégaoctets), ensuite tout fonctionne hors ligne.
           </p>
         </>
       )}
@@ -224,7 +246,27 @@ export function ReceiptCapture({ onUse }: ReceiptCaptureProps) {
         </p>
       )}
 
-      {fields && (
+      {statement && statement.lines.length > 0 && fields && (
+        <div className="flex gap-1 rounded-full bg-surface-2 p-1">
+          <ModeTab active={mode === 'releve'} onClick={() => setMode('releve')}>
+            Relevé · {statement.lines.length} opérations
+          </ModeTab>
+          <ModeTab active={mode === 'ticket'} onClick={() => setMode('ticket')}>
+            Ticket unique
+          </ModeTab>
+        </div>
+      )}
+
+      {mode === 'releve' && statement && statement.lines.length > 0 && (
+        <StatementReview
+          lines={statement.lines}
+          ocrText={ocrText}
+          scope={scope}
+          onDone={onImported}
+        />
+      )}
+
+      {mode === 'ticket' && fields && (
         <>
           <div className="flex flex-col gap-2 rounded-2xl border border-line bg-surface-2/50 p-4">
             <p className="flex items-center gap-2 text-sm font-medium">
@@ -321,6 +363,29 @@ export function ReceiptCapture({ onUse }: ReceiptCaptureProps) {
         </>
       )}
     </div>
+  );
+}
+
+function ModeTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`min-h-[40px] flex-1 cursor-pointer rounded-full px-3 text-xs font-semibold transition-colors ${
+        active ? 'bg-gradient-flow text-white' : 'text-ink-2 hover:text-ink'
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -736,10 +736,13 @@ export function Settings() {
 
       {/* Coach IA */}
       <Card>
-        <SectionTitle icon={KeyRound}>Coach IA (optionnel)</SectionTitle>
+        <SectionTitle icon={KeyRound}>Claude (optionnel)</SectionTitle>
         <p className="mb-2 text-xs leading-relaxed text-ink-3">
-          Clé API Anthropic pour l'analyse approfondie. Stockée uniquement sur cet appareil,
-          jamais envoyée ailleurs qu'à l'API. L'app fonctionne à 100 % sans.
+          Clé API Anthropic, stockée uniquement sur cet appareil et jamais envoyée ailleurs qu'à
+          l'API. Elle débloque deux choses : l'analyse approfondie du coach, et un bouton
+          « Relire avec Claude » quand une capture bancaire passe mal. Cette relecture utilise le
+          modèle le moins cher du catalogue et n'envoie que le texte lu, jamais l'image — de
+          l'ordre de quelques centaines de jetons par capture. L'app fonctionne à 100 % sans clé.
         </p>
         <input
           type="password"

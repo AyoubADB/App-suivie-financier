@@ -8,6 +8,7 @@ Web app (PWA) de suivi des dépenses & revenus, perso et pro. Fonctionne **hors-
 - **Pensée pour le téléphone** : barre de navigation au pouce, feuilles glissantes, zones sûres sous l'encoche, pas de zoom intempestif à la saisie
 - **Vue d'ensemble + 10 vues détaillées** accessibles par une liste déroulante : dépenses, revenus, répartition, solde prévisionnel, budgets, objectifs, abonnements, coach, activité pro, TVA
 - **Scan de facture** : photo, image ou PDF lus sur l'appareil, montant, date, enseigne et TVA extraits automatiquement
+- **Capture d'écran bancaire** : une photo de l'écran de ta banque et toutes les opérations visibles sont extraites d'un coup, dépenses et encaissements distingués, libellés nettoyés et catégories proposées
 - **Rappels quotidiens** : échéance à confirmer, budget dépassé, trésorerie qui plonge, abonnement dormant
 - **Connexion Google** (Firebase Auth) : chaque compte a son propre stockage isolé dans Firestore
 - **Recherche globale** (`⌘K` / `Ctrl+K`) sur tout l'historique + recherche locale par onglet
@@ -32,6 +33,43 @@ Web app (PWA) de suivi des dépenses & revenus, perso et pro. Fonctionne **hors-
 ## Stack
 
 React + Vite + TypeScript (strict) · Tailwind CSS v4 · Framer Motion · lucide-react · Recharts · Dexie.js (IndexedDB) · Firebase (Auth + Firestore) · vite-plugin-pwa · Tesseract.js (OCR local) · pdf.js
+
+## Lire une capture d'écran bancaire
+
+Le même moteur sert pour un ticket de caisse et pour l'écran de ton appli
+bancaire, mais le travail n'est pas le même : un ticket donne une opération,
+une capture de compte en donne quinze. `src/logic/statementShot.ts` découpe
+l'écran ligne par ligne et, pour chacune, détermine le sens de l'opération —
+le point difficile, puisque la couleur qui le porte à l'écran est perdue à la
+capture. Trois sources, dans l'ordre : le signe s'il a survécu à la lecture,
+le vocabulaire du libellé (`VIR RECU`, `PRLV`, `RETRAIT`) sinon, et à défaut
+dépense, qui est le cas le plus fréquent. L'origine du choix est affichée, et
+chaque ligne se retourne d'un geste.
+
+Le reste est du nettoyage : préfixes bancaires retirés (`CARTE 13/09`,
+`PRLV SEPA`), enseignes reconnues, colonnes de solde ignorées, en-têtes et
+totaux écartés. Les lignes déjà présentes dans l'app sont détectées et
+décochées, si bien qu'on peut réimporter une capture qui chevauche la
+précédente sans rien dupliquer.
+
+### L'option Claude, et pourquoi elle coûte si peu
+
+Quand une capture passe mal, un bouton propose une relecture par Claude. Elle
+est construite pour être la moins chère possible :
+
+- le **texte** est envoyé, jamais l'image — à contenu égal, une image coûte
+  près de dix fois plus de jetons ;
+- les lignes sans montant sont retirées avant l'envoi ;
+- la réponse tient en une ligne par opération (`JJ/MM|libellé|montant|D`),
+  sans JSON ni phrase d'introduction ;
+- le modèle est **Claude Haiku 4.5**, le moins cher du catalogue, largement
+  suffisant pour de l'extraction ;
+- la catégorisation reste locale : envoyer la liste des catégories doublerait
+  la facture pour un résultat moins cohérent avec tes propres règles.
+
+Une capture d'une vingtaine d'opérations tourne autour de 600 jetons au
+total. L'estimation est affichée sur le bouton avant l'envoi, et le nombre
+réellement consommé après.
 
 ## Reconnaissance de tickets, en local
 

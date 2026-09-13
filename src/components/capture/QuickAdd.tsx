@@ -13,8 +13,8 @@ const ACTIONS: Array<{ mode: QuickAddMode; label: string; hint: string; icon: ty
   },
   {
     mode: 'scan',
-    label: 'Scanner une facture',
-    hint: 'Photo, image ou PDF — le montant est lu',
+    label: 'Scanner',
+    hint: 'Ticket, facture, ou capture de ton compte',
     icon: Camera,
   },
   {
