@@ -23,6 +23,12 @@ export interface StatementLine {
   type: TxType;
   /** D'où vient le sens : signe lu, couleur du montant, mot reconnu, défaut. */
   origin: 'signe' | 'couleur' | 'libellé' | 'défaut';
+  /**
+   * Le libellé est-il digne de confiance ? Un nom trop court ou un sous-titre
+   * générique trahissent une lecture ratée : mieux vaut le dire que laisser
+   * l'utilisateur découvrir l'erreur une fois la transaction enregistrée.
+   */
+  labelSure: boolean;
   /** Ligne d'origine, affichée en cas de doute. */
   raw: string;
 }
@@ -174,6 +180,19 @@ function inlineDate(line: string, fallbackYear: number): string | null {
 
 /** Nettoie un libellé bancaire pour en faire un nom lisible. */
 export function cleanLabel(raw: string): string {
+  return cleanLabelStrict(raw) ?? fallbackLabel(raw);
+}
+
+/**
+ * Nettoie un libellé, ou renonce.
+ *
+ * La version qui devine (« Opération ») convient à une lecture ligne à ligne,
+ * où la ligne EST l'opération. Sur une capture d'écran, plusieurs fragments se
+ * disputent le rôle de libellé — dont l'icône de l'application, que la
+ * reconnaissance rend en un caractère isolé. Deviner ferait gagner ce
+ * fragment-là contre le vrai nom du commerçant.
+ */
+export function cleanLabelStrict(raw: string): string | null {
   let label = raw
     .replace(new RegExp(AMOUNT_PATTERN, 'g'), ' ')
     .replace(/\s+/g, ' ')
@@ -190,9 +209,8 @@ export function cleanLabel(raw: string): string {
     .replace(/[^\p{L}\p{N})]+$/u, '')
     .trim();
 
-  // Après nettoyage il peut ne rester qu'un numéro : le type d'opération
-  // lu dans la ligne d'origine est alors plus parlant que des chiffres.
-  if (!/\p{L}{2}/u.test(label)) return fallbackLabel(raw);
+  // Après nettoyage il peut ne rester qu'un numéro ou un glyphe isolé.
+  if (!/\p{L}{2}/u.test(label)) return null;
 
   const brand = matchBrand(label);
   if (brand) return brand;
@@ -298,7 +316,8 @@ export function extractStatement(text: string, now = new Date()): StatementParse
     const signed = amounts.filter((a) => a.sign !== 0);
     const chosen = signed.length > 0 ? signed[0] : amounts[amounts.length - 1];
 
-    const label = cleanLabel(raw);
+    const strict = cleanLabelStrict(raw);
+    const label = strict ?? fallbackLabel(raw);
     if (label.length < 2) {
       skipped++;
       continue;
@@ -322,6 +341,7 @@ export function extractStatement(text: string, now = new Date()): StatementParse
       amount: chosen.cents,
       type,
       origin,
+      labelSure: strict !== null,
       raw,
     });
   }
@@ -476,8 +496,9 @@ export function extractStatementFromLayout(
   let index = 0;
 
   for (const hit of hits) {
-    const label = labelFor(hit, lines, rowHeight);
-    if (!label) continue;
+    const found = labelFor(hit, lines, rowHeight);
+    if (!found) continue;
+    const label = found.text;
 
     let type: TxType;
     let origin: StatementLine['origin'];
@@ -513,6 +534,7 @@ export function extractStatementFromLayout(
       amount: hit.cents,
       type,
       origin,
+      labelSure: found.sure,
       raw: lineText || label,
     });
   }
@@ -530,7 +552,11 @@ function median(values: number[]): number {
  * Le sous-titre générique d'une ligne est écarté au profit du nom du
  * commerçant, écrit juste au-dessus.
  */
-function labelFor(hit: AmountHit, lines: OcrLine[], rowHeight: number): string | null {
+function labelFor(
+  hit: AmountHit,
+  lines: OcrLine[],
+  rowHeight: number,
+): { text: string; sure: boolean } | null {
   const y = centerY(hit.box);
   // Une ligne d'opération tient dans environ deux hauteurs de texte : au-delà
   // on attraperait l'opération voisine.
@@ -546,26 +572,34 @@ function labelFor(hit: AmountHit, lines: OcrLine[], rowHeight: number): string |
       // Le libellé est à gauche du montant ; les mots à droite sont la devise.
       return line.box.x0 < hit.box.x0;
     })
-    .map(({ line, index }) => ({
-      index,
-      text: cleanLabel(stripAmounts(line.text)),
-      generic: isGenericSubtitle(stripAmounts(line.text)),
-      distance: Math.abs(centerY(line.box) - y),
-      above: centerY(line.box) <= y,
-    }))
-    .filter((c) => /\p{L}{2}/u.test(c.text));
+    .map(({ line, index }) => {
+      const stripped = stripAmounts(line.text);
+      return {
+        index,
+        text: cleanLabelStrict(stripped),
+        generic: isGenericSubtitle(stripped),
+        distance: Math.abs(centerY(line.box) - y),
+        above: centerY(line.box) <= y,
+      };
+    })
+    .filter((c): c is typeof c & { text: string } => c.text !== null);
 
   if (candidates.length === 0) return null;
 
-  // Un vrai nom de commerçant prime sur « Paiement par carte » ; à égalité,
-  // le plus proche du montant, puis celui du dessus — le nom est au-dessus.
+  // Un vrai nom de commerçant prime sur « Paiement par carte » ; à distance
+  // comparable, le texte le plus étoffé, puis celui du dessus — le nom est
+  // écrit au-dessus du sous-titre.
+  const letters = (text: string) => (text.match(/\p{L}/gu) ?? []).length;
   const ranked = [...candidates].sort((a, b) => {
     if (a.generic !== b.generic) return a.generic ? 1 : -1;
-    if (Math.abs(a.distance - b.distance) > 2) return a.distance - b.distance;
+    if (Math.abs(a.distance - b.distance) > rowHeight * 0.6) return a.distance - b.distance;
+    if (letters(a.text) !== letters(b.text)) return letters(b.text) - letters(a.text);
     return a.above === b.above ? 0 : a.above ? -1 : 1;
   });
 
-  return ranked[0].text || null;
+  const best = ranked[0];
+  const letterCount = letters(best.text);
+  return { text: best.text, sure: !best.generic && letterCount >= 3 };
 }
 
 function stripAmounts(text: string): string {

@@ -115,6 +115,8 @@ export function parseAiLines(text: string, now = new Date()): StatementLine[] {
       amount,
       type,
       origin: 'signe',
+      // Le modèle a relu la capture : son libellé vaut mieux que le nôtre.
+      labelSure: true,
       raw,
     });
   }

@@ -3,6 +3,7 @@ import {
   ChevronDown,
   Coins,
   Loader2,
+  Pencil,
   Sparkles,
   SquareCheck,
   Square,
@@ -37,6 +38,8 @@ interface Row extends StatementLine {
   duplicate: boolean;
   /** Chaque ligne peut partir en perso ou en pro, indépendamment des autres. */
   scope: Scope;
+  /** L'utilisateur a choisi la catégorie : elle ne suit plus le libellé. */
+  categoryTouched: boolean;
 }
 
 /**
@@ -89,6 +92,7 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
           selected: !duplicate,
           duplicate,
           scope,
+          categoryTouched: effects.categoryId !== undefined,
         };
       }),
     [categories, rules, scope, seen],
@@ -105,6 +109,24 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
     setRows((current) => current.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }
 
+  /**
+   * Renomme une ligne, et recalcule sa catégorie dans la foulée.
+   * Corriger « ue » en « Apple » doit suffire à ranger la ligne au bon
+   * endroit : sinon il faudrait faire deux fois le travail.
+   */
+  function rename(row: Row, label: string) {
+    if (row.categoryTouched) {
+      update(row.id, { label, labelSure: true });
+      return;
+    }
+    const suggestion = suggestCategory(label, {
+      scope: row.scope,
+      type: row.type,
+      categories,
+    });
+    update(row.id, { label, labelSure: true, categoryId: suggestion.category.id });
+  }
+
   /** Retire définitivement une ligne mal lue : plus clair que la décocher. */
   function remove(id: string) {
     setRows((current) => current.filter((r) => r.id !== id));
@@ -115,7 +137,11 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
   function flipType(row: Row) {
     const type: TxType = row.type === 'expense' ? 'revenue' : 'expense';
     const suggestion = suggestCategory(row.label, { scope: row.scope, type, categories });
-    update(row.id, { type, categoryId: suggestion.category.id, origin: 'signe' });
+    update(row.id, {
+      type,
+      origin: 'signe',
+      categoryId: row.categoryTouched ? row.categoryId : suggestion.category.id,
+    });
   }
 
   const selected = rows.filter((r) => r.selected);
@@ -123,6 +149,7 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
   const totalOut = selected.filter((r) => r.type === 'expense').reduce((a, r) => a + r.amount, 0);
   const uncertain = rows.filter((r) => r.origin === 'défaut' && r.selected).length;
   const byColor = rows.filter((r) => r.origin === 'couleur').length;
+  const unsure = rows.filter((r) => !r.labelSure && r.selected).length;
   const duplicates = rows.filter((r) => r.duplicate).length;
 
   async function importAll() {
@@ -232,6 +259,26 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
         </p>
       )}
 
+      <p className="flex items-start gap-2 text-xs leading-relaxed text-ink-3">
+        <Pencil size={14} className="mt-0.5 shrink-0" />
+        Touche une ligne pour corriger son libellé, sa catégorie, sa date ou sa portée. Corriger le
+        libellé remet aussi la catégorie à jour.
+      </p>
+
+      {unsure > 0 && (
+        <button
+          type="button"
+          onClick={() => setOpen(rows.find((r) => !r.labelSure)?.id ?? null)}
+          className="flex cursor-pointer items-start gap-2 rounded-2xl bg-warn/10 px-3.5 py-3 text-left text-xs leading-relaxed text-warn"
+        >
+          <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+          <span>
+            {unsure} libellé{unsure > 1 ? 's' : ''} mal lu{unsure > 1 ? 's' : ''} par la
+            reconnaissance. Touche ici pour corriger le premier.
+          </span>
+        </button>
+      )}
+
       {byColor > 0 && (
         <p className="flex items-start gap-2 text-xs leading-relaxed text-pos">
           <Check size={14} className="mt-0.5 shrink-0" />
@@ -288,7 +335,18 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
                   aria-expanded={expanded}
                   className="min-w-0 flex-1 cursor-pointer text-left"
                 >
-                  <span className="block truncate text-sm font-medium">{row.label}</span>
+                  <span className="flex items-center gap-1.5">
+                    {!row.labelSure && (
+                      <TriangleAlert size={13} className="shrink-0 text-warn" />
+                    )}
+                    <span
+                      className={`truncate text-sm font-medium ${
+                        row.labelSure ? '' : 'text-warn'
+                      }`}
+                    >
+                      {row.label}
+                    </span>
+                  </span>
                   <span className="flex items-center gap-1 text-[11px] text-ink-3">
                     <Icon size={11} style={{ color: category?.color }} />
                     <span className="truncate">{category?.label ?? 'Autre'}</span>
@@ -307,18 +365,24 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
                   </span>
                 </button>
 
-                <span
-                  className={`amount shrink-0 text-sm font-semibold ${
-                    row.type === 'revenue' ? 'text-pos' : ''
-                  }`}
+                <button
+                  type="button"
+                  onClick={() => setOpen(expanded ? null : row.id)}
+                  aria-label={expanded ? `Replier ${row.label}` : `Modifier ${row.label}`}
+                  className="flex shrink-0 cursor-pointer items-center gap-1.5 py-1 pl-1"
                 >
-                  {formatCents(row.amount, currency)}
-                </span>
-
-                <ChevronDown
-                  size={15}
-                  className={`shrink-0 text-ink-3 transition-transform ${expanded ? 'rotate-180' : ''}`}
-                />
+                  <span
+                    className={`amount text-sm font-semibold ${
+                      row.type === 'revenue' ? 'text-pos' : ''
+                    }`}
+                  >
+                    {formatCents(row.amount, currency)}
+                  </span>
+                  <ChevronDown
+                    size={16}
+                    className={`text-ink-3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                  />
+                </button>
               </div>
 
               {expanded && (
@@ -327,8 +391,9 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
                     <span className="text-xs text-ink-2">Libellé</span>
                     <input
                       value={row.label}
-                      onChange={(e) => update(row.id, { label: e.target.value })}
+                      onChange={(e) => rename(row, e.target.value)}
                       maxLength={140}
+                      autoFocus={!row.labelSure}
                       className="min-h-[44px] w-full rounded-2xl border border-line bg-surface-2 px-3 text-base focus:border-accent focus:outline-none"
                     />
                   </label>
@@ -361,7 +426,7 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
                     <CategoryPicker
                       categories={categories}
                       value={row.categoryId}
-                      onChange={(categoryId) => update(row.id, { categoryId })}
+                      onChange={(categoryId) => update(row.id, { categoryId, categoryTouched: true })}
                       scope={scope}
                       type={row.type}
                     />
