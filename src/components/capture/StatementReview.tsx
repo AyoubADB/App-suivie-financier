@@ -6,6 +6,7 @@ import {
   Sparkles,
   SquareCheck,
   Square,
+  Trash2,
   TriangleAlert,
 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
@@ -19,6 +20,7 @@ import { applyRules } from '../../logic/rules';
 import type { StatementLine } from '../../logic/statementShot';
 import type { Scope, TxType } from '../../types';
 import { CategoryPicker } from '../transactions/CategoryPicker';
+import { Segmented } from '../ui/Segmented';
 import { getIcon } from '../ui/icons';
 
 interface StatementReviewProps {
@@ -33,6 +35,8 @@ interface Row extends StatementLine {
   categoryId: string;
   selected: boolean;
   duplicate: boolean;
+  /** Chaque ligne peut partir en perso ou en pro, indépendamment des autres. */
+  scope: Scope;
 }
 
 /**
@@ -48,7 +52,7 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
   const rules = useRules();
   const existing = useTransactions();
   const repo = useRepo();
-  const { currency } = useSettings();
+  const { currency, proEnabled } = useSettings();
 
   const apiKey = storedApiKey();
 
@@ -84,6 +88,7 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
           categoryId: effects.categoryId ?? suggestion.category.id,
           selected: !duplicate,
           duplicate,
+          scope,
         };
       }),
     [categories, rules, scope, seen],
@@ -100,10 +105,16 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
     setRows((current) => current.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }
 
+  /** Retire définitivement une ligne mal lue : plus clair que la décocher. */
+  function remove(id: string) {
+    setRows((current) => current.filter((r) => r.id !== id));
+    setOpen((o) => (o === id ? null : o));
+  }
+
   /** Le sens change : la catégorie suggérée n'est plus la même. */
   function flipType(row: Row) {
     const type: TxType = row.type === 'expense' ? 'revenue' : 'expense';
-    const suggestion = suggestCategory(row.label, { scope, type, categories });
+    const suggestion = suggestCategory(row.label, { scope: row.scope, type, categories });
     update(row.id, { type, categoryId: suggestion.category.id, origin: 'signe' });
   }
 
@@ -111,6 +122,7 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
   const totalIn = selected.filter((r) => r.type === 'revenue').reduce((a, r) => a + r.amount, 0);
   const totalOut = selected.filter((r) => r.type === 'expense').reduce((a, r) => a + r.amount, 0);
   const uncertain = rows.filter((r) => r.origin === 'défaut' && r.selected).length;
+  const byColor = rows.filter((r) => r.origin === 'couleur').length;
   const duplicates = rows.filter((r) => r.duplicate).length;
 
   async function importAll() {
@@ -120,7 +132,7 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
       for (const row of selected) {
         await repo.addTransaction({
           type: row.type,
-          scope,
+          scope: row.scope,
           amount: row.amount,
           currency,
           label: row.label,
@@ -190,6 +202,24 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
           >
             Tout décocher
           </button>
+          {proEnabled && (
+            <>
+              <button
+                type="button"
+                onClick={() => setRows((c) => c.map((r) => ({ ...r, scope: 'perso' })))}
+                className="glass min-h-[36px] cursor-pointer rounded-full px-3 text-xs font-medium"
+              >
+                Tout en perso
+              </button>
+              <button
+                type="button"
+                onClick={() => setRows((c) => c.map((r) => ({ ...r, scope: 'pro' })))}
+                className="glass min-h-[36px] cursor-pointer rounded-full px-3 text-xs font-medium"
+              >
+                Tout en pro
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -199,6 +229,14 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
           {duplicates} ligne{duplicates > 1 ? 's' : ''} déjà présente
           {duplicates > 1 ? 's' : ''} dans l'app {duplicates > 1 ? 'ont' : 'a'} été décochée
           {duplicates > 1 ? 's' : ''}.
+        </p>
+      )}
+
+      {byColor > 0 && (
+        <p className="flex items-start gap-2 text-xs leading-relaxed text-pos">
+          <Check size={14} className="mt-0.5 shrink-0" />
+          {byColor} ligne{byColor > 1 ? 's' : ''} {byColor > 1 ? 'ont' : 'a'} été classée
+          {byColor > 1 ? 's' : ''} en encaissement d'après la couleur verte du montant.
         </p>
       )}
 
@@ -254,7 +292,18 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
                   <span className="flex items-center gap-1 text-[11px] text-ink-3">
                     <Icon size={11} style={{ color: category?.color }} />
                     <span className="truncate">{category?.label ?? 'Autre'}</span>
-                    <span>· {row.dateISO.slice(8, 10)}/{row.dateISO.slice(5, 7)}</span>
+                    <span>
+                      · {row.dateISO.slice(8, 10)}/{row.dateISO.slice(5, 7)}
+                    </span>
+                    {proEnabled && (
+                      <span
+                        className={`rounded-full px-1.5 font-semibold ${
+                          row.scope === 'pro' ? 'bg-accent/15 text-accent-2' : 'bg-surface-2'
+                        }`}
+                      >
+                        {row.scope}
+                      </span>
+                    )}
                   </span>
                 </button>
 
@@ -318,7 +367,35 @@ export function StatementReview({ lines, ocrText, scope, onDone }: StatementRevi
                     />
                   </div>
 
-                  <p className="text-[11px] text-ink-3">Lu : « {row.raw} »</p>
+                  {proEnabled && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs text-ink-2">Portée</span>
+                      <Segmented
+                        options={[
+                          { value: 'perso', label: 'Perso' },
+                          { value: 'pro', label: 'Pro' },
+                        ]}
+                        value={row.scope}
+                        onChange={(next) => update(row.id, { scope: next })}
+                        size="sm"
+                        className="self-start"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="min-w-0 flex-1 truncate text-[11px] text-ink-3">
+                      Lu : « {row.raw} »
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => remove(row.id)}
+                      className="flex min-h-[40px] shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border border-neg/40 px-3 text-xs font-medium text-neg hover:bg-neg/10"
+                    >
+                      <Trash2 size={14} />
+                      Supprimer la ligne
+                    </button>
+                  </div>
                 </div>
               )}
             </li>

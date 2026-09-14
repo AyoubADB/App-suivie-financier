@@ -1,6 +1,7 @@
 import { normalize } from './categorizer';
 import { toISODate } from './dates';
 import { hasWords, matchBrand, titleCase } from './receipt';
+import type { OcrBox, OcrLine, OcrWord } from './ocr';
 import type { TxType } from '../types';
 
 /**
@@ -20,8 +21,8 @@ export interface StatementLine {
   /** Toujours positif : le sens est porté par `type`. */
   amount: number;
   type: TxType;
-  /** D'où vient le sens : un signe lu, un mot reconnu, ou le défaut. */
-  origin: 'signe' | 'libellé' | 'défaut';
+  /** D'où vient le sens : signe lu, couleur du montant, mot reconnu, défaut. */
+  origin: 'signe' | 'couleur' | 'libellé' | 'défaut';
   /** Ligne d'origine, affichée en cas de doute. */
   raw: string;
 }
@@ -345,8 +346,12 @@ const BANK_MARKERS = [
 export function looksLikeStatement(parse: StatementParse, rawText = ''): boolean {
   if (parse.lines.length < 3) return false;
 
-  const signed = parse.lines.filter((l) => l.origin === 'signe').length;
-  if (signed >= 2) return true;
+  // Un montant vert vaut un signe : dans les deux cas le sens est mesuré,
+  // pas deviné.
+  const measured = parse.lines.filter(
+    (l) => l.origin === 'signe' || l.origin === 'couleur',
+  ).length;
+  if (measured >= 2) return true;
 
   const bankLines = rawText
     .split('\n')
@@ -356,4 +361,213 @@ export function looksLikeStatement(parse: StatementParse, rawText = ''): boolean
     }).length;
 
   return bankLines >= 3;
+}
+
+// ---------------------------------------------------------------------------
+// Lecture d'une capture d'écran, en tenant compte de la mise en page
+// ---------------------------------------------------------------------------
+
+/**
+ * Sous-titres génériques d'une ligne d'opération.
+ * « Paiement par carte » sous le nom du commerçant n'est pas un libellé :
+ * c'est de la décoration, présente à l'identique sur toutes les lignes.
+ */
+const GENERIC_SUBTITLES = [
+  'paiement par carte', 'paiement carte', 'paiement mobile', 'achat carte',
+  'carte bancaire', 'prelevement', 'prelevement sepa', 'virement recu',
+  'virement emis', 'virement', 'retrait', 'retrait especes', 'remboursement recu',
+  'operation', 'transaction', 'en attente', 'en cours de traitement',
+];
+
+function isGenericSubtitle(text: string): boolean {
+  const flat = normalize(text);
+  return GENERIC_SUBTITLES.some((g) => flat === g || flat.startsWith(`${g} `));
+}
+
+/** Couleur dominante du texte d'un montant, quand on peut la mesurer. */
+export type AmountColor = 'vert' | 'autre' | 'inconnu';
+
+export interface LayoutOptions {
+  /** Couleur du texte dans une zone de l'image d'origine. */
+  colorAt?: (box: OcrBox) => AmountColor;
+  now?: Date;
+}
+
+/** Montant repéré dans la page, avec l'endroit exact où il est écrit. */
+interface AmountHit {
+  cents: number;
+  sign: 1 | -1 | 0;
+  box: OcrBox;
+  /** Index de la ligne OCR qui le porte. */
+  lineIndex: number;
+}
+
+function centerY(box: OcrBox): number {
+  return (box.y0 + box.y1) / 2;
+}
+
+/** Repère les montants d'une ligne et la position de chacun. */
+function amountHitsInLine(line: OcrLine, lineIndex: number): AmountHit[] {
+  const hits: AmountHit[] = [];
+  const re = new RegExp(AMOUNT_PATTERN, 'g');
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(line.text)) !== null) {
+    const raw = m[0];
+    const parsed = signedAmountsIn(raw)[0];
+    if (!parsed) continue;
+
+    // Retrouve les mots qui composent ce montant, pour connaître sa position.
+    const digits = raw.replace(/[^\d]/g, '');
+    const box = boxOfWords(
+      line.words.filter((w) => {
+        const wordDigits = w.text.replace(/[^\d]/g, '');
+        return wordDigits.length > 0 && digits.includes(wordDigits);
+      }),
+    );
+    hits.push({ ...parsed, box: box ?? line.box, lineIndex });
+  }
+  return hits;
+}
+
+function boxOfWords(words: OcrWord[]): OcrBox | null {
+  if (words.length === 0) return null;
+  return {
+    x0: Math.min(...words.map((w) => w.box.x0)),
+    y0: Math.min(...words.map((w) => w.box.y0)),
+    x1: Math.max(...words.map((w) => w.box.x1)),
+    y1: Math.max(...words.map((w) => w.box.y1)),
+  };
+}
+
+/**
+ * Extrait les opérations d'une capture d'écran en s'appuyant sur la position
+ * des mots.
+ *
+ * C'est ce qui distingue cette lecture de celle d'un simple texte : dans une
+ * application bancaire, le nom du commerçant, son sous-titre et le montant
+ * sont trois blocs distincts, que la reconnaissance de texte rend dans un
+ * ordre imprévisible. Seule la géométrie dit lequel va avec lequel — le
+ * libellé est ce qui est écrit à gauche du montant, à sa hauteur.
+ */
+export function extractStatementFromLayout(
+  lines: OcrLine[],
+  options: LayoutOptions = {},
+): StatementParse {
+  const now = options.now ?? new Date();
+  const headers: Array<{ y: number; dateISO: string }> = [];
+  const hits: AmountHit[] = [];
+
+  lines.forEach((line, index) => {
+    const header = headerDate(line.text, now);
+    if (header) {
+      headers.push({ y: centerY(line.box), dateISO: header });
+      return;
+    }
+    if (isNoise(line.text)) return;
+    hits.push(...amountHitsInLine(line, index));
+  });
+
+  // Hauteur de référence : sert à juger ce qui est « à la même hauteur ».
+  const heights = hits.map((h) => h.box.y1 - h.box.y0).filter((h) => h > 0);
+  const rowHeight = heights.length > 0 ? median(heights) : 24;
+
+  const out: StatementLine[] = [];
+  let index = 0;
+
+  for (const hit of hits) {
+    const label = labelFor(hit, lines, rowHeight);
+    if (!label) continue;
+
+    let type: TxType;
+    let origin: StatementLine['origin'];
+
+    if (hit.sign !== 0) {
+      type = hit.sign > 0 ? 'revenue' : 'expense';
+      origin = 'signe';
+    } else {
+      // Le vert d'une application bancaire signale un encaissement. La
+      // couleur disparaît du texte reconnu : on va la lire dans l'image.
+      const color = options.colorAt?.(hit.box) ?? 'inconnu';
+      if (color === 'vert') {
+        type = 'revenue';
+        origin = 'couleur';
+      } else {
+        const guessed = typeFromWords(`${label} ${lines[hit.lineIndex]?.text ?? ''}`);
+        type = guessed ?? 'expense';
+        origin = guessed ? 'libellé' : 'défaut';
+      }
+    }
+
+    const y = centerY(hit.box);
+    const header = [...headers].reverse().find((h) => h.y < y);
+    const lineText = lines[hit.lineIndex]?.text ?? '';
+
+    out.push({
+      id: `g${index++}`,
+      dateISO:
+        inlineDate(lineText, new Date(header?.dateISO ?? toISODate(now)).getFullYear()) ??
+        header?.dateISO ??
+        toISODate(now),
+      label: label.slice(0, 120),
+      amount: hit.cents,
+      type,
+      origin,
+      raw: lineText || label,
+    });
+  }
+
+  return { lines: out, skipped: Math.max(0, lines.length - out.length) };
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+/**
+ * Libellé d'un montant : ce qui est écrit à sa gauche, à sa hauteur.
+ * Le sous-titre générique d'une ligne est écarté au profit du nom du
+ * commerçant, écrit juste au-dessus.
+ */
+function labelFor(hit: AmountHit, lines: OcrLine[], rowHeight: number): string | null {
+  const y = centerY(hit.box);
+  // Une ligne d'opération tient dans environ deux hauteurs de texte : au-delà
+  // on attraperait l'opération voisine.
+  const tolerance = rowHeight * 2.2;
+
+  const candidates = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => {
+      if (Math.abs(centerY(line.box) - y) > tolerance) return false;
+      // Un en-tête de compte ne peut pas servir de libellé : sinon le solde
+      // affiché en haut de l'écran deviendrait une opération.
+      if (isNoise(line.text)) return false;
+      // Le libellé est à gauche du montant ; les mots à droite sont la devise.
+      return line.box.x0 < hit.box.x0;
+    })
+    .map(({ line, index }) => ({
+      index,
+      text: cleanLabel(stripAmounts(line.text)),
+      generic: isGenericSubtitle(stripAmounts(line.text)),
+      distance: Math.abs(centerY(line.box) - y),
+      above: centerY(line.box) <= y,
+    }))
+    .filter((c) => /\p{L}{2}/u.test(c.text));
+
+  if (candidates.length === 0) return null;
+
+  // Un vrai nom de commerçant prime sur « Paiement par carte » ; à égalité,
+  // le plus proche du montant, puis celui du dessus — le nom est au-dessus.
+  const ranked = [...candidates].sort((a, b) => {
+    if (a.generic !== b.generic) return a.generic ? 1 : -1;
+    if (Math.abs(a.distance - b.distance) > 2) return a.distance - b.distance;
+    return a.above === b.above ? 0 : a.above ? -1 : 1;
+  });
+
+  return ranked[0].text || null;
+}
+
+function stripAmounts(text: string): string {
+  return text.replace(new RegExp(AMOUNT_PATTERN, 'g'), ' ').replace(/\s+/g, ' ').trim();
 }

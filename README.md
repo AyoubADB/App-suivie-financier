@@ -8,7 +8,7 @@ Web app (PWA) de suivi des dépenses & revenus, perso et pro. Fonctionne **hors-
 - **Pensée pour le téléphone** : barre de navigation au pouce, feuilles glissantes, zones sûres sous l'encoche, pas de zoom intempestif à la saisie
 - **Vue d'ensemble + 10 vues détaillées** accessibles par une liste déroulante : dépenses, revenus, répartition, solde prévisionnel, budgets, objectifs, abonnements, coach, activité pro, TVA
 - **Scan de facture** : photo, image ou PDF lus sur l'appareil, montant, date, enseigne et TVA extraits automatiquement
-- **Capture d'écran bancaire** : une photo de l'écran de ta banque et toutes les opérations visibles sont extraites d'un coup, dépenses et encaissements distingués, libellés nettoyés et catégories proposées
+- **Capture d'écran bancaire** : une ou plusieurs captures de l'écran de ta banque, et toutes les opérations visibles sont extraites d'un coup — dates des en-têtes de groupe, libellés nettoyés, catégories proposées, et les encaissements reconnus à la couleur verte de leur montant
 - **Rappels quotidiens** : échéance à confirmer, budget dépassé, trésorerie qui plonge, abonnement dormant
 - **Connexion Google** (Firebase Auth) : chaque compte a son propre stockage isolé dans Firestore
 - **Recherche globale** (`⌘K` / `Ctrl+K`) sur tout l'historique + recherche locale par onglet
@@ -38,19 +38,65 @@ React + Vite + TypeScript (strict) · Tailwind CSS v4 · Framer Motion · lucide
 
 Le même moteur sert pour un ticket de caisse et pour l'écran de ton appli
 bancaire, mais le travail n'est pas le même : un ticket donne une opération,
-une capture de compte en donne quinze. `src/logic/statementShot.ts` découpe
-l'écran ligne par ligne et, pour chacune, détermine le sens de l'opération —
-le point difficile, puisque la couleur qui le porte à l'écran est perdue à la
-capture. Trois sources, dans l'ordre : le signe s'il a survécu à la lecture,
-le vocabulaire du libellé (`VIR RECU`, `PRLV`, `RETRAIT`) sinon, et à défaut
-dépense, qui est le cas le plus fréquent. L'origine du choix est affichée, et
-chaque ligne se retourne d'un geste.
+une capture de compte en donne quinze.
 
-Le reste est du nettoyage : préfixes bancaires retirés (`CARTE 13/09`,
-`PRLV SEPA`), enseignes reconnues, colonnes de solde ignorées, en-têtes et
-totaux écartés. Les lignes déjà présentes dans l'app sont détectées et
-décochées, si bien qu'on peut réimporter une capture qui chevauche la
-précédente sans rien dupliquer.
+### Pourquoi la position des mots compte
+
+Dans une application bancaire, le nom du commerçant, son sous-titre
+(« Paiement par carte ») et le montant sont trois blocs distincts, que la
+reconnaissance de texte rend dans un ordre imprévisible : le montant tombe
+souvent sur sa propre ligne, séparé du commerçant auquel il appartient. Une
+lecture ligne par ligne rate alors tout.
+
+`extractStatementFromLayout` travaille donc sur la **position** des mots, pas
+sur le texte à plat : chaque montant est repéré avec ses coordonnées, et son
+libellé est ce qui est écrit **à sa gauche, à sa hauteur**. Le sous-titre
+générique est écarté au profit du nom du commerçant, écrit juste au-dessus.
+Les dates viennent des en-têtes de groupe (« Mardi 08 septembre 2026 »), qui
+datent toutes les opérations situées en dessous.
+
+### Le vert veut dire encaissement
+
+Le signe d'un montant ne survit pas toujours à la lecture, et beaucoup
+d'applications ne l'affichent pas du tout : c'est la couleur qui distingue
+une rentrée d'une sortie. Cette couleur disparaît du texte reconnu, mais elle
+est toujours dans l'image. `src/logic/imageColor.ts` va la relire dans les
+pixels, à l'endroit exact où le montant est écrit : il sépare le texte du fond
+en gardant les pixels les plus éloignés de la couleur moyenne de la zone, puis
+juge leur teinte. Ça marche sur thème clair comme sur thème sombre, sans avoir
+à traiter les deux cas séparément.
+
+Le sens est donc établi dans cet ordre : le signe s'il a été lu, la couleur du
+montant sinon, le vocabulaire du libellé à défaut, et dépense en dernier
+recours. L'origine du choix est affichée sur chaque ligne.
+
+### Plusieurs captures à la fois
+
+Un relevé tient rarement sur un seul écran. Le sélecteur accepte plusieurs
+images d'un coup : chacune est lue séparément, et toutes les opérations
+arrivent dans une seule liste.
+
+### L'ancienne lecture, toujours là
+
+`extractStatement` lit un texte à plat, sans coordonnées. Elle sert aux PDF
+déjà textuels et de secours quand la mise en page n'est pas exploitable — la
+plus riche des deux lectures l'emporte. Elle détermine le sens de l'opération —
+à partir du signe, puis du vocabulaire du libellé (`VIR RECU`, `PRLV`,
+`RETRAIT`), et à défaut dépense, qui est le cas le plus fréquent.
+
+Le reste est du nettoyage, commun aux deux lectures : préfixes bancaires
+retirés (`CARTE 13/09`, `PRLV SEPA`), enseignes reconnues, colonnes de solde
+ignorées, en-têtes et totaux écartés. Les lignes déjà présentes dans l'app sont
+détectées et décochées, si bien qu'on peut réimporter une capture qui chevauche
+la précédente sans rien dupliquer.
+
+### L'écran de relecture
+
+Rien n'est enregistré sans un regard. Chaque ligne se coche, se supprime, et
+s'ouvre sur un éditeur complet : libellé, montant, date, catégorie, dépense ou
+revenu, perso ou pro. Deux raccourcis passent toute la liste en perso ou en
+pro. C'est le garde-fou : la reconnaissance se trompera parfois sur un nom, et
+il doit être plus rapide de corriger que de ressaisir.
 
 ### L'option Claude, et pourquoi elle coûte si peu
 

@@ -10,6 +10,35 @@ import type { Worker } from 'tesseract.js';
 
 let workerPromise: Promise<Worker> | null = null;
 
+export interface OcrBox {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+export interface OcrWord {
+  text: string;
+  box: OcrBox;
+}
+
+/** Ligne de texte reconnue, avec la position de chacun de ses mots. */
+export interface OcrLine {
+  text: string;
+  box: OcrBox;
+  words: OcrWord[];
+}
+
+export interface OcrResult {
+  text: string;
+  /**
+   * Mise en page reconnue. Indispensable pour une capture d'écran bancaire :
+   * le montant y est souvent sur sa propre ligne, et seule sa position permet
+   * de le rattacher au bon commerçant — et d'aller lire sa couleur.
+   */
+  lines: OcrLine[];
+}
+
 export type OcrStage = 'chargement' | 'analyse' | 'terminé';
 
 export interface OcrProgress {
@@ -51,16 +80,39 @@ async function getWorker(onProgress?: (p: OcrProgress) => void): Promise<Worker>
   return workerPromise;
 }
 
-/** Texte brut lu dans une image. */
+/** Texte et mise en page lus dans une image. */
 export async function recognizeImage(
   source: Blob | string,
   onProgress?: (p: OcrProgress) => void,
-): Promise<string> {
+): Promise<OcrResult> {
   const worker = await getWorker(onProgress);
   onProgress?.({ stage: 'analyse', ratio: 0 });
-  const { data } = await worker.recognize(source);
+  const { data } = await worker.recognize(source, {}, { text: true, blocks: true });
   onProgress?.({ stage: 'terminé', ratio: 1 });
-  return data.text ?? '';
+  return { text: data.text ?? '', lines: flattenLines(data.blocks) };
+}
+
+/** Aplatit l'arbre blocs → paragraphes → lignes rendu par le moteur. */
+function flattenLines(blocks: unknown): OcrLine[] {
+  const out: OcrLine[] = [];
+  const tree = blocks as
+    | Array<{ paragraphs: Array<{ lines: Array<{ text: string; bbox: OcrBox; words: Array<{ text: string; bbox: OcrBox }> }> }> }>
+    | null
+    | undefined;
+  if (!tree) return out;
+
+  for (const block of tree) {
+    for (const paragraph of block.paragraphs ?? []) {
+      for (const line of paragraph.lines ?? []) {
+        const words = (line.words ?? [])
+          .filter((w) => w.text.trim())
+          .map((w) => ({ text: w.text.trim(), box: w.bbox }));
+        const text = line.text.replace(/\s+/g, ' ').trim();
+        if (text) out.push({ text, box: line.bbox, words });
+      }
+    }
+  }
+  return out;
 }
 
 /** Libère le moteur — appelé quand l'écran de capture se ferme. */

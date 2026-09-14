@@ -5,11 +5,24 @@ import { useSettings } from '../../context/SettingsContext';
 import { suggestCategory } from '../../logic/categorizer';
 import { LIMITS } from '../../logic/limits';
 import { formatCents } from '../../logic/money';
-import { ocrSupported, recognizeImage, releaseOcr, type OcrProgress } from '../../logic/ocr';
+import { createColorProbe } from '../../logic/imageColor';
+import {
+  ocrSupported,
+  recognizeImage,
+  releaseOcr,
+  type OcrProgress,
+  type OcrResult,
+} from '../../logic/ocr';
 import { readPdf } from '../../logic/pdf';
 import { extractReceipt, type ReceiptFields } from '../../logic/receipt';
 import { applyRules } from '../../logic/rules';
-import { extractStatement, looksLikeStatement, type StatementParse } from '../../logic/statementShot';
+import {
+  extractStatement,
+  extractStatementFromLayout,
+  looksLikeStatement,
+  type StatementLine,
+  type StatementParse,
+} from '../../logic/statementShot';
 import type { Scope } from '../../types';
 import { getIcon } from '../ui/icons';
 import { StatementReview } from './StatementReview';
@@ -57,52 +70,81 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
   const [statement, setStatement] = useState<StatementParse | null>(null);
   const [ocrText, setOcrText] = useState('');
   const [mode, setMode] = useState<'ticket' | 'releve'>('ticket');
+  /** Vignettes des captures lues, pour se repérer quand il y en a plusieurs. */
+  const [previews, setPreviews] = useState<string[]>([]);
   const [error, setError] = useState('');
 
   // Le moteur occupe plusieurs dizaines de mégaoctets de mémoire : on le
   // relâche dès que l'écran de capture disparaît.
   useEffect(() => () => void releaseOcr(), []);
 
-  async function handle(file: File | undefined) {
-    if (!file) return;
+  /**
+   * Lit une ou plusieurs captures d'un coup.
+   * Un relevé tient rarement sur un seul écran : autoriser plusieurs images
+   * évite d'enchaîner les allers-retours, et les opérations de toutes les
+   * captures se retrouvent dans une seule liste.
+   */
+  async function handle(files: FileList | null) {
+    const list = files ? [...files] : [];
+    if (list.length === 0) return;
+
     setError('');
     setFields(null);
     setStatement(null);
+    setPreviews([]);
     setBusy(true);
     setProgress({ stage: 'chargement', ratio: 0 });
 
     try {
-      let text = '';
-      let image: string;
+      const collected: StatementLine[] = [];
+      const texts: string[] = [];
+      const thumbs: string[] = [];
+      let firstReceipt: { fields: ReceiptFields; text: string } | null = null;
 
-      if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-        const pdf = await readPdf(file);
-        image = pdf.pageImage;
-        setPreview(image);
-        setReceipt(await shrinkDataUrl(image, 1100, 0.7));
-        // Une facture générée par un logiciel contient déjà son texte :
-        // inutile de la reconnaître, c'est plus rapide et sans erreur.
-        text = pdf.text.length > 40 ? pdf.text : await runOcr(image);
-      } else {
-        // Deux tailles : la grande sert à lire, la petite à conserver.
-        image = await downscale(file, 1600, 0.85);
-        setPreview(image);
-        setReceipt(await downscale(file, 1100, 0.7));
-        text = await runOcr(image);
+      for (const [index, file] of list.entries()) {
+        setProgress({ stage: 'chargement', ratio: index / list.length });
+        const read = await readSource(file);
+        thumbs.push(read.image);
+        setPreviews([...thumbs]);
+        if (index === 0) {
+          setPreview(read.image);
+          setReceipt(read.receipt);
+        }
+        if (!read.result.text.trim()) continue;
+
+        texts.push(read.result.text);
+
+        // La position des mots rattache chaque montant à son commerçant ;
+        // la couleur du montant dit s'il s'agit d'un encaissement.
+        const probe = read.canProbe ? await safeProbe(read.image) : undefined;
+        const layout =
+          read.result.lines.length > 0
+            ? extractStatementFromLayout(read.result.lines, { colorAt: probe })
+            : extractStatement(read.result.text);
+
+        // Sans mise en page exploitable, la lecture ligne à ligne reste utile.
+        const fallback = extractStatement(read.result.text);
+        const best = layout.lines.length >= fallback.lines.length ? layout : fallback;
+        collected.push(
+          ...best.lines.map((line, i) => ({ ...line, id: `f${index}-${line.id}-${i}` })),
+        );
+
+        if (index === 0) firstReceipt = { fields: extractReceipt(read.result.text), text: read.result.text };
       }
 
-      if (!text.trim()) {
+      if (texts.length === 0) {
         setError('Aucun texte lisible. Reprends la photo à plat, bien éclairée et sans flou.');
         return;
       }
 
-      // Un ticket de caisse et une capture de compte se lisent différemment.
-      // On analyse les deux, et c'est le contenu qui décide de la vue.
-      const parsed = extractStatement(text);
-      setOcrText(text);
+      const joined = texts.join('\n');
+      const parsed: StatementParse = { lines: collected, skipped: 0 };
+      setOcrText(joined);
       setStatement(parsed);
-      setFields(extractReceipt(text));
-      setMode(looksLikeStatement(parsed, text) ? 'releve' : 'ticket');
+      setFields(firstReceipt?.fields ?? null);
+      // Plusieurs images, c'est forcément un relevé : on ne scanne pas deux
+      // tickets pour n'en garder qu'un.
+      setMode(list.length > 1 || looksLikeStatement(parsed, joined) ? 'releve' : 'ticket');
     } catch (err) {
       const message = err instanceof Error ? err.message : '';
       const engineFailed = /worker|importscripts|network|fetch|wasm/i.test(message);
@@ -117,7 +159,44 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
     }
   }
 
-  async function runOcr(image: string): Promise<string> {
+  /** Prépare une source : image réduite, version conservée, texte reconnu. */
+  async function readSource(file: File): Promise<{
+    image: string;
+    receipt: string;
+    result: OcrResult;
+    canProbe: boolean;
+  }> {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      const pdf = await readPdf(file);
+      const shrunk = await shrinkDataUrl(pdf.pageImage, 1000, 0.7);
+      // Une facture générée par un logiciel contient déjà son texte :
+      // inutile de la reconnaître, c'est plus rapide et sans erreur.
+      if (pdf.text.length > 40) {
+        return { image: pdf.pageImage, receipt: shrunk, result: { text: pdf.text, lines: [] }, canProbe: false };
+      }
+      return { image: pdf.pageImage, receipt: shrunk, result: await runOcr(pdf.pageImage), canProbe: true };
+    }
+
+    // Deux tailles : la grande sert à lire, la petite à conserver.
+    const image = await downscale(file, 1500, 0.9);
+    return {
+      image,
+      receipt: await downscale(file, 1000, 0.7),
+      result: await runOcr(image),
+      canProbe: true,
+    };
+  }
+
+  /** Une couleur illisible ne doit pas faire échouer toute la lecture. */
+  async function safeProbe(image: string) {
+    try {
+      return await createColorProbe(image);
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function runOcr(image: string): Promise<OcrResult> {
     if (!ocrSupported()) throw new Error('OCR indisponible sur ce navigateur.');
     return recognizeImage(image, setProgress);
   }
@@ -177,16 +256,18 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
               className="glass flex min-h-[56px] cursor-pointer items-center justify-center gap-2 rounded-2xl text-sm font-medium"
             >
               <ImagePlus size={18} />
-              Image ou PDF
+              Images ou PDF
             </button>
           </div>
 
           <p className="text-xs leading-relaxed text-ink-3">
             Fonctionne avec un ticket de caisse, une facture, ou une{' '}
             <strong className="font-medium text-ink-2">capture d'écran de ton compte bancaire</strong> —
-            dans ce cas toutes les opérations visibles sont extraites d'un coup. Tout est lu sur ton
-            téléphone, rien n'est envoyé sur Internet. La première lecture télécharge le moteur
-            (quelques mégaoctets), ensuite tout fonctionne hors ligne.
+            dans ce cas toutes les opérations visibles sont extraites d'un coup. Tu peux
+            sélectionner <strong className="font-medium text-ink-2">plusieurs captures</strong> à la
+            fois : elles se retrouvent dans une seule liste. Tout est lu sur ton téléphone, rien
+            n'est envoyé sur Internet. La première lecture télécharge le moteur (quelques
+            mégaoctets), ensuite tout fonctionne hors ligne.
           </p>
         </>
       )}
@@ -198,7 +279,7 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
         capture="environment"
         hidden
         onChange={(e) => {
-          void handle(e.target.files?.[0]);
+          void handle(e.target.files);
           e.target.value = '';
         }}
       />
@@ -206,19 +287,33 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
         ref={fileInput}
         type="file"
         accept="image/*,application/pdf"
+        multiple
         hidden
         onChange={(e) => {
-          void handle(e.target.files?.[0]);
+          void handle(e.target.files);
           e.target.value = '';
         }}
       />
 
-      {preview && (
-        <img
-          src={preview}
-          alt="Aperçu du justificatif"
-          className="max-h-56 w-full rounded-2xl object-contain ring-1 ring-line"
-        />
+      {previews.length > 1 ? (
+        <div className="scrollbar-none flex gap-2 overflow-x-auto">
+          {previews.map((src, i) => (
+            <img
+              key={`${src.slice(-24)}-${i}`}
+              src={src}
+              alt={`Capture ${i + 1}`}
+              className="h-28 shrink-0 rounded-xl object-contain ring-1 ring-line"
+            />
+          ))}
+        </div>
+      ) : (
+        preview && (
+          <img
+            src={preview}
+            alt="Aperçu du justificatif"
+            className="max-h-56 w-full rounded-2xl object-contain ring-1 ring-line"
+          />
+        )
       )}
 
       {busy && (
@@ -409,14 +504,19 @@ function Row({
 }
 
 /** Réduit une data-URL déjà chargée — cas du PDF rendu en image. */
-async function shrinkDataUrl(dataUrl: string, maxSide: number, quality: number): Promise<string> {
+async function shrinkDataUrl(dataUrl: string, maxWidth: number, quality: number): Promise<string> {
   const img = new Image();
   await new Promise<void>((resolve, reject) => {
     img.onload = () => resolve();
     img.onerror = () => reject(new Error('Image invalide'));
     img.src = dataUrl;
   });
-  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  // Jamais d'agrandissement : on ne crée pas de détail qui n'existe pas.
+  let scale = Math.min(1, maxWidth / img.width);
+  const maxPixels = 4_500_000;
+  const pixels = img.width * scale * (img.height * scale);
+  if (pixels > maxPixels) scale *= Math.sqrt(maxPixels / pixels);
+
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(img.width * scale);
   canvas.height = Math.round(img.height * scale);
@@ -425,11 +525,14 @@ async function shrinkDataUrl(dataUrl: string, maxSide: number, quality: number):
 }
 
 /**
- * Réduit une photo avant lecture.
- * Une photo d'iPhone fait 4000 px de large : la reconnaissance y prendrait
- * une éternité pour un résultat moins bon qu'à 1600 px.
+ * Réduit une image avant lecture.
+ *
+ * On borne la largeur, pas le plus grand côté : une capture d'écran de
+ * téléphone est très haute et peu large, et la réduire sur sa hauteur
+ * écraserait le texte au point de le rendre illisible. Un plafond en nombre
+ * de pixels protège des photos d'appareil photo, énormes dans les deux sens.
  */
-async function downscale(file: File, maxSide: number, quality: number): Promise<string> {
+async function downscale(file: File, maxWidth: number, quality: number): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
@@ -444,7 +547,12 @@ async function downscale(file: File, maxSide: number, quality: number): Promise<
     img.src = dataUrl;
   });
 
-  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  // Jamais d'agrandissement : on ne crée pas de détail qui n'existe pas.
+  let scale = Math.min(1, maxWidth / img.width);
+  const maxPixels = 4_500_000;
+  const pixels = img.width * scale * (img.height * scale);
+  if (pixels > maxPixels) scale *= Math.sqrt(maxPixels / pixels);
+
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(img.width * scale);
   canvas.height = Math.round(img.height * scale);
