@@ -19,6 +19,7 @@ const DEFAULTS: UserSettings = {
   urssafRate: 0.246,
   vatThreshold: 3_750_000,
   revenueCeiling: 7_770_000,
+  hiddenBlocks: [],
 };
 
 /** Cache local : évite un flash de thème au chargement et sert de source en mode hors-ligne. */

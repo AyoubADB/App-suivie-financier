@@ -118,7 +118,7 @@ service cloud.firestore {
                'currency', 'theme', 'savingsGoal',
                'monthStartDay', 'defaultScope', 'privacyMode',
                'usage', 'proEnabled', 'onboarded',
-               'urssafRate', 'vatThreshold', 'revenueCeiling'
+               'urssafRate', 'vatThreshold', 'revenueCeiling', 'hiddenBlocks'
              ])
              && str(d.currency, 5)
              && d.theme in ['dark', 'light']
@@ -135,7 +135,9 @@ service cloud.firestore {
              && (!('urssafRate' in d)
                  || (d.urssafRate is number && d.urssafRate >= 0 && d.urssafRate <= 1))
              && (!('vatThreshold' in d) || (d.vatThreshold is int && d.vatThreshold >= 0))
-             && (!('revenueCeiling' in d) || (d.revenueCeiling is int && d.revenueCeiling >= 0));
+             && (!('revenueCeiling' in d) || (d.revenueCeiling is int && d.revenueCeiling >= 0))
+             && (!('hiddenBlocks' in d)
+                 || (d.hiddenBlocks is list && d.hiddenBlocks.size() <= 40));
     }
 
     // ------------------------------------------------------------- budgets

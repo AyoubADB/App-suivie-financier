@@ -108,7 +108,7 @@ export function ProSummary() {
               const color = row.activity?.color ?? '#82828e';
               const share = row.revenue > 0 ? Math.min(1, row.margin / row.revenue) : 0;
               return (
-                <li key={row.activity?.id ?? 'sans-activite'}>
+                <li key={row.activityId || 'sans-activite'}>
                   <div className="mb-1.5 flex items-center gap-2.5">
                     <span
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"

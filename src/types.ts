@@ -170,6 +170,12 @@ export interface UserSettings {
   vatThreshold: number;
   /** Plafond de chiffre d'affaires du régime, en centimes. */
   revenueCeiling: number;
+  /**
+   * Blocs masqués sur la vue d'ensemble.
+   * On stocke ce qui est caché plutôt que ce qui est visible : un bloc ajouté
+   * par une mise à jour apparaît alors tout seul, sans réglage à reprendre.
+   */
+  hiddenBlocks: string[];
 }
 
 /** Plafond de dépense mensuel sur une catégorie. */

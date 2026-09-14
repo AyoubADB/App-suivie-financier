@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { AlertTriangle, CheckCircle2, Info, Loader2, Sparkles } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Info, Loader2, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { askAiCoach, buildCoachSummary } from '../../logic/aiCoach';
 import { generateInsights, type CoachContext } from '../../logic/coach';
@@ -30,6 +30,11 @@ interface CoachSectionProps {
   coachContext?: CoachContext;
   /** Lien vers la page dédiée, affiché depuis le tableau de bord. */
   detailTo?: string;
+  /**
+   * Replié par défaut. Sur la vue d'ensemble le coach est long : on n'en
+   * montre que la phrase d'accroche, le détail se déplie à la demande.
+   */
+  collapsible?: boolean;
 }
 
 const SEVERITY_STYLE: Record<Insight['severity'], { icon: typeof Info; className: string }> = {
@@ -48,6 +53,7 @@ export function CoachSection({
   budgetStatuses = [],
   coachContext = {},
   detailTo,
+  collapsible = false,
 }: CoachSectionProps) {
   const insights = generateInsights(
     stats,
@@ -81,6 +87,7 @@ export function CoachSection({
   );
   const apiKey = localStorage.getItem('flow.apiKey') ?? '';
 
+  const [expanded, setExpanded] = useState(!collapsible);
   const [aiText, setAiText] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
@@ -115,7 +122,21 @@ export function CoachSection({
         </h2>
         <span className="flex shrink-0 items-center gap-1">
         {detailTo && <DetailLink to={detailTo} />}
-        {apiKey && (
+        {collapsible && (
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Replier le coach' : 'Déplier le coach'}
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-ink-3 hover:bg-surface-2 hover:text-ink"
+          >
+            <ChevronDown
+              size={18}
+              className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
+            />
+          </button>
+        )}
+        {apiKey && expanded && (
           <button
             onClick={() => void runAiAnalysis()}
             disabled={aiLoading}
@@ -128,6 +149,25 @@ export function CoachSection({
         </span>
       </div>
 
+      {!expanded ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="w-full cursor-pointer rounded-2xl border border-accent/20 bg-accent/6 p-4 text-left"
+        >
+          <p className="text-sm font-semibold leading-snug">{report.headline}</p>
+          {report.action && (
+            <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-ink-2">
+              {report.action}
+            </p>
+          )}
+          <p className="mt-2 text-[11px] font-medium text-accent-2">
+            Toucher pour lire l'analyse complète
+            {insights.length > 0 && ` et ${insights.length} conseil${insights.length > 1 ? 's' : ''}`}
+          </p>
+        </button>
+      ) : (
+        <>
       {/* Le récit passe avant la liste : on lit d'abord ce qui s'est passé,
           les conseils détaillés viennent ensuite. */}
       <div className="mb-3 rounded-2xl border border-accent/20 bg-accent/6 p-4">
@@ -201,6 +241,8 @@ export function CoachSection({
           d'un calcul sur tes chiffres. Pour une analyse rédigée par un modèle de langue, ajoute une
           clé API Anthropic dans les réglages — c'est facultatif.
         </p>
+      )}
+        </>
       )}
     </Card>
   );

@@ -1,12 +1,17 @@
 import { CalendarClock, ChartPie, LineChart, PiggyBank } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BudgetSection } from '../components/budgets/BudgetSection';
 import { ForecastCard } from '../components/forecast/ForecastCard';
 import { GoalsCard } from '../components/goals/GoalsCard';
 import { MigrationBanner } from '../components/MigrationBanner';
 import { PeriodSelector } from '../components/PeriodSelector';
+import { ActivityFilter, ALL_ACTIVITIES } from '../components/pro/ActivityFilter';
 import { ProSummary } from '../components/pro/ProSummary';
+import { CustomiseOverview } from '../components/overview/CustomiseOverview';
+import { ReserveCard } from '../components/overview/ReserveCard';
+import { SubscriptionsCard } from '../components/overview/SubscriptionsCard';
+import { visibleBlocks } from '../components/overview/blocks';
 import { PendingQueue } from '../components/scheduled/PendingQueue';
 import { SectionSwitcher } from '../components/layout/SectionSwitcher';
 import { CategoryDonut } from '../components/charts/CategoryDonut';
@@ -36,13 +41,25 @@ import { formatCents, formatPct } from '../logic/money';
 import { OVERVIEW } from './sections/registry';
 
 export function Dashboard() {
-  const txs = useTransactions();
+  const allTxs = useTransactions();
   const categories = useCategories();
   const { scope, setScope } = useScope();
   const { period, range } = usePeriod();
-  const { currency, savingsGoal, proEnabled, urssafRate } = useSettings();
+  const { currency, savingsGoal, proEnabled, urssafRate, hiddenBlocks } = useSettings();
   const scheduled = useScheduled();
   const goals = useGoals();
+  /** Isole une casquette : la moyenne de deux activités ne décrit ni l'une ni l'autre. */
+  const [activityFilter, setActivityFilter] = useState(ALL_ACTIVITIES);
+
+  const show = visibleBlocks(hiddenBlocks, proEnabled);
+
+  const txs = useMemo(
+    () =>
+      scope === 'pro' && activityFilter !== ALL_ACTIVITIES
+        ? allTxs.filter((tx) => tx.activityId === activityFilter)
+        : allTxs,
+    [allTxs, scope, activityFilter],
+  );
 
   const stats = useMemo(
     () => computePeriodStats(txs, categories, scope, period, range),
@@ -81,7 +98,9 @@ export function Dashboard() {
 
       {/* Chaque bloc du tableau de bord a sa page détaillée : la liste
           déroulante y mène sans avoir à chercher. */}
-      <SectionSwitcher current={OVERVIEW} />
+      <div className="md:hidden">
+        <SectionSwitcher current={OVERVIEW} />
+      </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {proEnabled && (
@@ -99,9 +118,15 @@ export function Dashboard() {
         <div className="flex-1">
           <PeriodSelector />
         </div>
+        <CustomiseOverview />
       </div>
 
+      {proEnabled && scope === 'pro' && (
+        <ActivityFilter value={activityFilter} onChange={setActivityFilter} />
+      )}
+
       {/* Cartes clés — chacune ouvre sa vue détaillée */}
+      {show.has('cles') && (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KeyCard to="/vue/revenus" delay={0}>
           <p className="text-xs text-ink-3">Revenus</p>
@@ -160,9 +185,14 @@ export function Dashboard() {
           </p>
         </KeyCard>
       </div>
+      )}
+
+      {show.has('reserve') && <ReserveCard net={stats.net} detailTo="/vue/previsionnel" />}
 
       {/* Graphiques */}
+      {(show.has('evolution') || show.has('repartition')) && (
       <div className="grid gap-4 lg:grid-cols-2">
+        {show.has('evolution') && (
         <Card delay={0.2}>
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -181,6 +211,8 @@ export function Dashboard() {
             <TrendChart series={stats.series} currency={currency} />
           )}
         </Card>
+        )}
+        {show.has('repartition') && (
         <Card delay={0.25}>
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -191,16 +223,20 @@ export function Dashboard() {
           </div>
           <CategoryDonut breakdown={stats.byCategory} currency={currency} />
         </Card>
+        )}
       </div>
+      )}
 
-      <ForecastCard detailTo="/vue/previsionnel" />
+      {show.has('previsionnel') && <ForecastCard detailTo="/vue/previsionnel" />}
 
-      <BudgetSection detailTo="/vue/budgets" />
+      {show.has('budgets') && <BudgetSection detailTo="/vue/budgets" />}
 
-      <GoalsCard detailTo="/vue/objectifs" />
+      {show.has('objectifs') && <GoalsCard detailTo="/vue/objectifs" />}
+
+      {show.has('abonnements') && <SubscriptionsCard detailTo="/vue/abonnements" />}
 
       {/* Synthèse de l'activité indépendante, sur la vue Pro uniquement. */}
-      {proEnabled && scope === 'pro' && (
+      {show.has('pro') && scope === 'pro' && (
         <>
           <ProSummary />
           <div className="flex justify-end">
@@ -210,6 +246,7 @@ export function Dashboard() {
       )}
 
       {/* Coach */}
+      {show.has('coach') && (
       <CoachSection
         stats={stats}
         allTxs={txs}
@@ -220,9 +257,12 @@ export function Dashboard() {
         budgetStatuses={budgetStatuses}
         coachContext={{ scheduled, goals, proEnabled, urssafRate }}
         detailTo="/vue/coach"
+        collapsible
       />
+      )}
 
       {/* Prochaines échéances */}
+      {show.has('echeances') && (
       <Card delay={0.3}>
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -263,6 +303,7 @@ export function Dashboard() {
           </ul>
         )}
       </Card>
+      )}
     </div>
   );
 }

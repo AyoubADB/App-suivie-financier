@@ -42,7 +42,15 @@ export function SectionView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <SectionSwitcher current={section} />
+      <div className="md:hidden">
+        <SectionSwitcher current={section} />
+      </div>
+
+      {/* Sur grand écran le menu de gauche affiche déjà les vues : un titre suffit. */}
+      <div className="hidden md:block">
+        <h1 className="text-xl font-bold">{section.label}</h1>
+        <p className="text-sm text-ink-3">{section.hint}</p>
+      </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {proEnabled && (

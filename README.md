@@ -6,7 +6,10 @@ Web app (PWA) de suivi des dépenses & revenus, perso et pro. Fonctionne **hors-
 
 - **Application installable** sur l'écran d'accueil iPhone et Android : plein écran, hors ligne, icône, raccourcis « Ajouter » et « Scanner »
 - **Pensée pour le téléphone** : barre de navigation au pouce, feuilles glissantes, zones sûres sous l'encoche, pas de zoom intempestif à la saisie
-- **Vue d'ensemble + 10 vues détaillées** accessibles par une liste déroulante : dépenses, revenus, répartition, solde prévisionnel, budgets, objectifs, abonnements, coach, activité pro, TVA
+- **Vue d'ensemble personnalisable + 10 vues détaillées** : liste déroulante sur téléphone, menu de gauche sur ordinateur ; chaque bloc du tableau de bord s'affiche ou se masque
+- **Reste à vivre** : ce qu'il reste une fois mis de côté les abonnements et prélèvements qui tombent avant la prochaine paie
+- **Abonnements consolidés** perso et pro sur la vue d'ensemble, coût mensuel et annuel, dormants signalés
+- **Filtre par activité** en vue Pro : tout le professionnel, ou une casquette à la fois
 - **Scan de facture** : photo, image ou PDF lus sur l'appareil, montant, date, enseigne et TVA extraits automatiquement
 - **Capture d'écran bancaire** : une ou plusieurs captures de l'écran de ta banque, et toutes les opérations visibles sont extraites d'un coup — dates des en-têtes de groupe, libellés nettoyés, catégories proposées, et les encaissements reconnus à la couleur verte de leur montant
 - **Rappels quotidiens** : échéance à confirmer, budget dépassé, trésorerie qui plonge, abonnement dormant
@@ -97,6 +100,13 @@ s'ouvre sur un éditeur complet : libellé, montant, date, catégorie, dépense 
 revenu, perso ou pro. Deux raccourcis passent toute la liste en perso ou en
 pro. C'est le garde-fou : la reconnaissance se trompera parfois sur un nom, et
 il doit être plus rapide de corriger que de ressaisir.
+
+Deux détails y rendent la correction rapide. Un libellé trop court, ou réduit
+au sous-titre générique de la ligne, est marqué douteux : la liste les compte
+et propose d'ouvrir le premier, plutôt que de laisser découvrir l'erreur une
+fois la transaction enregistrée. Et corriger un libellé recalcule la catégorie
+dans la foulée — renommer « Syma Mobile » en « Netflix » fait passer la ligne
+de Téléphone à Streaming — sauf si la catégorie a été choisie à la main.
 
 ### L'option Claude, et pourquoi elle coûte si peu
 

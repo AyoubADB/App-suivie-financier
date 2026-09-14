@@ -14,6 +14,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import { useDailyNotifications } from '../../hooks/useDailyNotifications';
+import { sectionsFor } from '../../pages/sections/registry';
 import { AccountMenu } from '../AccountMenu';
 import { GlobalSearch } from '../GlobalSearch';
 
@@ -72,7 +73,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-dvh md:flex">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col gap-8 border-r border-line bg-surface/60 p-6 backdrop-blur-xl md:flex">
         <Logo />
-        <nav className="flex flex-col gap-1">
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
           {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
@@ -90,9 +91,35 @@ export function AppLayout({ children }: { children: ReactNode }) {
               {label}
             </NavLink>
           ))}
+
+          {/* Vues détaillées : sur grand écran elles tiennent dans le menu,
+              alors que sur téléphone la liste déroulante reste plus maniable. */}
+          <p className="mt-4 px-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-3">
+            Vues détaillées
+          </p>
+          {sectionsFor(proEnabled).map((section) => {
+            const Icon = section.icon;
+            return (
+              <NavLink
+                key={section.slug}
+                to={`/vue/${section.slug}`}
+                title={section.hint}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm transition-colors ${
+                    isActive
+                      ? 'bg-surface-2 font-medium text-ink'
+                      : 'text-ink-3 hover:bg-surface-2 hover:text-ink-2'
+                  }`
+                }
+              >
+                <Icon size={16} />
+                <span className="truncate">{section.label}</span>
+              </NavLink>
+            );
+          })}
         </nav>
 
-        <p className="mt-auto flex items-center gap-2 text-[11px] leading-relaxed text-ink-3">
+        <p className="flex items-center gap-2 text-[11px] leading-relaxed text-ink-3">
           {mode === 'cloud' ? (
             <>
               <Cloud size={13} className="shrink-0" />

@@ -45,6 +45,8 @@ export function urssafProvision(
 }
 
 export interface ActivityPerformance {
+  /** Identifiant de l'activité, chaîne vide pour les mouvements non rattachés. */
+  activityId: string;
   activity: Activity | null;
   revenue: number;
   expenses: number;
@@ -84,6 +86,7 @@ export function activityPerformance(
     const expenses = list.filter((t) => t.type === 'expense').reduce((a, t) => a + t.amount, 0);
     const margin = revenue - expenses;
     rows.push({
+      activityId: key,
       activity: activities.find((a) => a.id === key) ?? null,
       revenue,
       expenses,
