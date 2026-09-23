@@ -115,6 +115,34 @@ function flattenLines(blocks: unknown): OcrLine[] {
   return out;
 }
 
+/**
+ * Efface le moteur mis en cache et le relâche.
+ *
+ * Un téléchargement interrompu laisse un moteur inutilisable en cache, et
+ * comme il est servi en « cache d'abord », il le reste indéfiniment : la
+ * lecture échoue alors sur toutes les captures, alors qu'elle marchait la
+ * veille. C'est la seule panne que l'utilisateur ne peut pas contourner
+ * lui-même, d'où ce bouton de remise à zéro.
+ */
+export async function resetOcrEngine(): Promise<void> {
+  await releaseOcr();
+
+  if (typeof caches !== 'undefined') {
+    const names = await caches.keys();
+    await Promise.all(names.filter((n) => n.includes('ocr')).map((n) => caches.delete(n)));
+  }
+
+  // Le moteur conserve aussi le modèle de langue dans une base locale.
+  if (typeof indexedDB !== 'undefined') {
+    await new Promise<void>((resolve) => {
+      const request = indexedDB.deleteDatabase('keyval-store');
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      request.onblocked = () => resolve();
+    });
+  }
+}
+
 /** Libère le moteur — appelé quand l'écran de capture se ferme. */
 export async function releaseOcr(): Promise<void> {
   if (!workerPromise) return;

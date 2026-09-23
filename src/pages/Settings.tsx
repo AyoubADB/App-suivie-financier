@@ -29,6 +29,7 @@ import { getIcon } from '../components/ui/icons';
 import { ActivitiesCard } from '../components/pro/ActivitiesCard';
 import { InstallCard } from '../components/settings/InstallCard';
 import { NotificationsCard } from '../components/settings/NotificationsCard';
+import { VersionCard } from '../components/settings/VersionCard';
 import { RulesCard } from '../components/rules/RulesCard';
 import { ScheduledCard } from '../components/scheduled/ScheduledCard';
 import { db } from '../data/db';
@@ -795,6 +796,8 @@ export function Settings() {
         </p>
         {importMsg && <p className="mt-3 text-sm text-ink-2">{importMsg}</p>}
       </Card>
+
+      <VersionCard />
 
       <LocalDataCard />
 

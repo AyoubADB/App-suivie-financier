@@ -10,6 +10,7 @@ import {
   ocrSupported,
   recognizeImage,
   releaseOcr,
+  resetOcrEngine,
   type OcrProgress,
   type OcrResult,
 } from '../../logic/ocr';
@@ -72,7 +73,18 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
   const [mode, setMode] = useState<'ticket' | 'releve'>('ticket');
   /** Vignettes des captures lues, pour se repérer quand il y en a plusieurs. */
   const [previews, setPreviews] = useState<string[]>([]);
-  const [error, setError] = useState('');
+  /**
+   * Panne rencontrée. Le détail technique est conservé : dire « prends une
+   * photo plus nette » quand c'est le moteur qui n'a pas démarré envoie
+   * chercher au mauvais endroit, et fait perdre un temps fou.
+   */
+  const [failure, setFailure] = useState<{
+    kind: 'moteur' | 'fichier' | 'illisible';
+    detail: string;
+  } | null>(null);
+  const [repairing, setRepairing] = useState(false);
+  /** Le moteur a-t-il atteint l'étape de lecture ? Sert à situer la panne. */
+  const reachedOcr = useRef(false);
 
   // Le moteur occupe plusieurs dizaines de mégaoctets de mémoire : on le
   // relâche dès que l'écran de capture disparaît.
@@ -88,7 +100,8 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
     const list = files ? [...files] : [];
     if (list.length === 0) return;
 
-    setError('');
+    setFailure(null);
+    reachedOcr.current = false;
     setFields(null);
     setStatement(null);
     setPreviews([]);
@@ -133,7 +146,10 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
       }
 
       if (texts.length === 0) {
-        setError('Aucun texte lisible. Reprends la photo à plat, bien éclairée et sans flou.');
+        setFailure({
+          kind: 'illisible',
+          detail: 'Le moteur a bien tourné mais n’a trouvé aucun caractère.',
+        });
         return;
       }
 
@@ -146,13 +162,14 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
       // tickets pour n'en garder qu'un.
       setMode(list.length > 1 || looksLikeStatement(parsed, joined) ? 'releve' : 'ticket');
     } catch (err) {
-      const message = err instanceof Error ? err.message : '';
-      const engineFailed = /worker|importscripts|network|fetch|wasm/i.test(message);
-      setError(
-        engineFailed
-          ? "Le moteur de lecture n'a pas pu démarrer. Vérifie ta connexion le temps de son premier téléchargement, puis réessaie."
-          : 'Lecture impossible. Essaie avec une photo plus nette et bien à plat, ou saisis le montant à la main.',
-      );
+      const detail = err instanceof Error ? err.message : String(err);
+      // Si la lecture n'a jamais commencé, c'est le moteur ou le fichier qui
+      // est en cause, jamais la netteté de la photo.
+      const fileFailed = /image invalide|lecture du fichier|pdf/i.test(detail);
+      setFailure({
+        kind: fileFailed ? 'fichier' : reachedOcr.current ? 'illisible' : 'moteur',
+        detail,
+      });
     } finally {
       setBusy(false);
       setProgress(null);
@@ -198,7 +215,21 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
 
   async function runOcr(image: string): Promise<OcrResult> {
     if (!ocrSupported()) throw new Error('OCR indisponible sur ce navigateur.');
-    return recognizeImage(image, setProgress);
+    return recognizeImage(image, (p) => {
+      if (p.stage === 'analyse') reachedOcr.current = true;
+      setProgress(p);
+    });
+  }
+
+  /** Vide le moteur mis en cache : la panne la plus fréquente vient de là. */
+  async function repair() {
+    setRepairing(true);
+    try {
+      await resetOcrEngine();
+      setFailure(null);
+    } finally {
+      setRepairing(false);
+    }
   }
 
   function use() {
@@ -334,12 +365,7 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
         </div>
       )}
 
-      {error && (
-        <p role="alert" className="flex items-start gap-2 text-sm text-neg">
-          <TriangleAlert size={16} className="mt-0.5 shrink-0" />
-          {error}
-        </p>
-      )}
+      {failure && <FailureNotice failure={failure} repairing={repairing} onRepair={repair} />}
 
       {statement && statement.lines.length > 0 && fields && (
         <div className="flex gap-1 rounded-full bg-surface-2 p-1">
@@ -456,6 +482,72 @@ export function ReceiptCapture({ onUse, scope, onImported }: ReceiptCaptureProps
             comme justificatif.
           </p>
         </>
+      )}
+    </div>
+  );
+}
+
+/** Explique la panne rencontrée, et propose la seule action qui la répare. */
+function FailureNotice({
+  failure,
+  repairing,
+  onRepair,
+}: {
+  failure: { kind: 'moteur' | 'fichier' | 'illisible'; detail: string };
+  repairing: boolean;
+  onRepair: () => void;
+}) {
+  const [showDetail, setShowDetail] = useState(false);
+
+  const texts = {
+    moteur: {
+      title: "Le moteur de lecture n'a pas démarré",
+      body: "Il est téléchargé une fois puis gardé sur l'appareil. Un téléchargement interrompu laisse une copie inutilisable, qui resservira tant qu'elle n'est pas effacée. Remets-le à zéro, puis réessaie — compte quelques mégaoctets.",
+      repair: true,
+    },
+    fichier: {
+      title: 'Ce fichier n’a pas pu être ouvert',
+      body: "Essaie une capture d'écran ou une photo au format JPEG ou PNG, ou un PDF. Certains formats d'image récents ne sont pas lisibles par le navigateur.",
+      repair: false,
+    },
+    illisible: {
+      title: 'Aucun texte trouvé sur cette image',
+      body: "Le moteur a bien tourné, mais n'a rien reconnu. Reprends la photo à plat, bien éclairée et sans flou, ou recadre la capture sur la liste des opérations.",
+      repair: false,
+    },
+  }[failure.kind];
+
+  return (
+    <div role="alert" className="flex flex-col gap-2 rounded-2xl border border-neg/30 bg-neg/8 p-4">
+      <p className="flex items-start gap-2 text-sm font-semibold text-neg">
+        <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+        {texts.title}
+      </p>
+      <p className="text-sm leading-relaxed text-ink-2">{texts.body}</p>
+
+      {texts.repair && (
+        <button
+          type="button"
+          onClick={onRepair}
+          disabled={repairing}
+          className="glass mt-1 flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-2xl text-sm font-medium disabled:opacity-60"
+        >
+          {repairing ? <Loader2 size={15} className="animate-spin" /> : <RotateCcw size={15} />}
+          {repairing ? 'Remise à zéro…' : 'Réinitialiser le moteur de lecture'}
+        </button>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setShowDetail((d) => !d)}
+        className="cursor-pointer self-start text-[11px] text-ink-3 underline"
+      >
+        {showDetail ? 'Masquer le détail technique' : 'Voir le détail technique'}
+      </button>
+      {showDetail && (
+        <p className="break-words rounded-xl bg-surface-2 px-3 py-2 text-[11px] text-ink-3">
+          {failure.detail}
+        </p>
       )}
     </div>
   );
